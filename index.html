@@ -5,69 +5,58 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>VOID PROTOCOL — Multiplayer FPS</title>
   <link rel="stylesheet" href="css/style.css" />
+  <style>
+    /* 버튼이 확실히 클릭되도록 pointer-events 보장 */
+    #lock-overlay { pointer-events: all !important; }
+    #lock-btn {
+      pointer-events: all !important;
+      position: relative;
+      z-index: 200;
+      cursor: pointer;
+    }
+  </style>
 </head>
 <body>
 
-<!-- 3D 캔버스 -->
 <canvas id="canvas" tabindex="0"></canvas>
-
-<!-- 스캔라인 오버레이 -->
 <div id="scanlines"></div>
 
 <!-- HUD -->
 <div id="hud">
-
-  <!-- 크로스헤어 -->
   <div id="crosshair"><div class="dot"></div></div>
-
-  <!-- 히트마커 -->
   <div id="hitmarker"></div>
-
-  <!-- ADS 비네트 -->
   <div id="ads-vignette"></div>
-
-  <!-- 데미지 플래시 -->
   <div id="damage-flash"></div>
-
-  <!-- 플레이어 수 -->
   <div id="player-count">PLAYERS: 1</div>
-
-  <!-- 킬피드 -->
   <div id="killfeed"></div>
 
-  <!-- 체력 -->
   <div id="health-bar">
     <div id="health-label">HEALTH</div>
     <div id="health-track"><div id="health-fill"></div></div>
     <div id="health-num">100</div>
   </div>
 
-  <!-- 대시 쿨다운 -->
   <div id="dash-cd">DASH READY</div>
 
-  <!-- 탄약 -->
   <div id="ammo-display">
     <div id="ammo-current">30</div>
     <div id="ammo-max">/ 30</div>
     <div id="ammo-mode">[AUTO]</div>
   </div>
 
-  <!-- 리로드 바 -->
   <div id="reload-bar">
     <div id="reload-label">RELOADING</div>
     <div id="reload-track"><div id="reload-fill"></div></div>
   </div>
-
 </div>
 
-<!-- 포인터 락 화면 -->
+<!-- 포인터 락 오버레이 -->
 <div id="lock-overlay">
   <h1>VOID PROTOCOL</h1>
   <p>MULTIPLAYER · PARKOUR · FPS</p>
-  <button id="lock-btn">[ ENTER ]</button>
-  <br/><br/>
-  <p style="font-size:11px;opacity:0.35;letter-spacing:3px;margin-top:8px">
-    WASD 이동 &nbsp;|&nbsp; SPACE 점프 &nbsp;|&nbsp; SHIFT 대시<br/>
+  <button id="lock-btn" type="button">[ ENTER ]</button>
+  <p style="font-size:11px;opacity:0.35;letter-spacing:3px;margin-top:24px">
+    WASD 이동 &nbsp;|&nbsp; SPACE 점프 &nbsp;|&nbsp; SHIFT 대시<br/><br/>
     우클릭 조준 &nbsp;|&nbsp; R 재장전 &nbsp;|&nbsp; M 사격모드 &nbsp;|&nbsp; 휠 줌
   </p>
 </div>
