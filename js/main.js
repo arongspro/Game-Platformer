@@ -119,9 +119,20 @@ function updateHud() {
   ammoMode.textContent      = '[' + player.fireMode + ']';
 
   reloadBar.classList.toggle('visible', player.isReloading);
-  dashCdEl.classList.toggle('visible',  player.dashCooldown > 0);
-  if (player.dashCooldown > 0)
-    dashCdEl.textContent = `DASH CD: ${Math.ceil(player.dashCooldown/60)}s`;
+
+  // 무적 시간 or 대시 쿨다운 표시
+  const invincible = network.isInvincible();
+  if (invincible) {
+    const remainMs = 3000 - (Date.now() - network._respawnTime);
+    dashCdEl.classList.add('visible');
+    dashCdEl.textContent = `🛡️ INVINCIBLE ${(remainMs/1000).toFixed(1)}s`;
+    dashCdEl.style.color = '#00ffe0';
+  } else {
+    dashCdEl.style.color = '';
+    dashCdEl.classList.toggle('visible', player.dashCooldown > 0);
+    if (player.dashCooldown > 0)
+      dashCdEl.textContent = `DASH CD: ${Math.ceil(player.dashCooldown/60)}s`;
+  }
 }
 
 // ────────────────────────────────────────────
@@ -176,7 +187,11 @@ player.onHudUpdate = updateHud;
 player.onDie = () => {
   deathScreen.classList.add('active');
   setTimeout(() => deathScreen.classList.remove('active'), 1500);
+  // network.sendRespawn 안에서 myHealth=100 + respawnTime 갱신 + hits 삭제
   network.sendRespawn(player.pos.toArray());
+  // player.health도 즉시 100으로 동기화
+  player.health = 100;
+  updateHud();
 };
 
 network.onPlayersUpdate = (others) => {
@@ -190,6 +205,8 @@ network.onPlayersUpdate = (others) => {
 };
 
 network.onHealthUpdate = (hp) => {
+  // 무적 시간 중이면 HP 변경 무시 (network.js에서 1차 차단, 여기서 2차)
+  if (network.isInvincible()) return;
   player.health = hp;
   updateHud();
   dmgFlash.classList.add('active');
