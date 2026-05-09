@@ -43,7 +43,7 @@ const network  = new Network(userInfo);
 
 // 로컬 플레이어 픽셀 캐릭터 적용 (OBJ 로드 후 바디 준비되면)
 setTimeout(() => {
-  if (userInfo.pixels) player.applyPixels(userInfo.pixels, renderer);
+  if (userInfo.pixels) player.applyPixels(userInfo.pixels);
 }, 500);
 const remoteMeshes = {};
 const clock = new THREE.Clock();
