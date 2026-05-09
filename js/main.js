@@ -139,9 +139,11 @@ function updateHud() {
 // 히트마커 / 킬피드
 // ────────────────────────────────────────────
 let hitmarkerTimer = 0;
-function showHitmarker() {
+function showHitmarker(isHeadshot = false) {
   hitmarker.classList.add('active');
-  hitmarkerTimer = 200;
+  // 헤드샷이면 빨간색, 일반은 흰색
+  hitmarker.style.setProperty('--hm-color', isHeadshot ? '#ff3c3c' : '#ffffff');
+  hitmarkerTimer = isHeadshot ? 350 : 200;
 }
 
 function addKillfeed(text) {
@@ -153,29 +155,74 @@ function addKillfeed(text) {
 }
 
 // ────────────────────────────────────────────
-// 레이캐스트 히트체크
+// 부위별 히트박스 레이캐스트
+// 플레이어 기준 Y좌표 (pos.y = 발 위치):
+//   머리:  pos.y + 1.7 ~ +2.2   반경 0.28
+//   복부:  pos.y + 0.9 ~ +1.6   반경 0.38
+//   다리:  pos.y + 0.0 ~ +0.9   반경 0.28
 // ────────────────────────────────────────────
+const HITBOXES = [
+  // { name, offsetY(중심), height(반높이), radius, damage }
+  { name: 'HEAD',  offsetY: 1.95, halfH: 0.27, radius: 0.28, damage: 20 },
+  { name: 'BODY',  offsetY: 1.25, halfH: 0.35, radius: 0.38, damage: 10 },
+  { name: 'LEGS',  offsetY: 0.45, halfH: 0.45, radius: 0.28, damage:  5 },
+];
+
+function rayVsCapsule(origin, front, center, halfH, radius) {
+  // 캡슐 = 실린더(axis Y) + 반구 양 끝
+  // 레이 vs 무한 실린더 먼저, Y 범위 클램프
+  const oc = origin.clone().sub(center);
+  // XZ 평면에서만 2D 레이 vs 원
+  const dx = front.x, dz = front.z;
+  const ox = oc.x,    oz = oc.z;
+  const a = dx*dx + dz*dz;
+  if (a < 1e-10) return Infinity;
+  const b = 2*(ox*dx + oz*dz);
+  const c = ox*ox + oz*oz - radius*radius;
+  const disc = b*b - 4*a*c;
+  if (disc < 0) return Infinity;
+  const t = (-b - Math.sqrt(disc)) / (2*a);
+  if (t < 0) return Infinity;
+  // 히트 지점 Y가 캡슐 범위 안인지
+  const hitY = origin.y + front.y * t;
+  if (hitY < center.y - halfH - radius || hitY > center.y + halfH + radius)
+    return Infinity;
+  return t;
+}
+
 function checkHit() {
   const origin = camCtrl.getHeadPos();
   const front  = camCtrl.getFront();
-  let minDist = 100, hitTarget = null;
+
+  let bestDist   = 200;
+  let hitTarget  = null;
+  let hitDamage  = 0;
+  let hitPart    = '';
 
   for (const [pid, info] of Object.entries(network.otherPlayers)) {
     if (!info?.pos) continue;
-    const tPos = new THREE.Vector3(info.pos[0], info.pos[1]+0.9, info.pos[2]);
-    const v = tPos.clone().sub(origin);
-    const t = v.dot(front);
-    if (t < 0) continue;
-    const nearest = origin.clone().addScaledVector(front, t);
-    if (tPos.distanceTo(nearest) < 0.6 && t < minDist) {
-      minDist = t; hitTarget = pid;
+    const base = new THREE.Vector3(info.pos[0], info.pos[1], info.pos[2]);
+
+    for (const hb of HITBOXES) {
+      const center = base.clone();
+      center.y += hb.offsetY;
+
+      const t = rayVsCapsule(origin, front, center, hb.halfH, hb.radius);
+      if (t < bestDist) {
+        bestDist  = t;
+        hitTarget = pid;
+        hitDamage = hb.damage;
+        hitPart   = hb.name;
+      }
     }
   }
 
   if (hitTarget) {
-    network.sendHit(hitTarget, 15);
-    showHitmarker();
-    addKillfeed(`💥 HIT → ${hitTarget.slice(-4)}`);
+    network.sendHit(hitTarget, hitDamage);
+    showHitmarker(hitPart === 'HEAD');
+
+    const icon = hitPart === 'HEAD' ? '🎯' : hitPart === 'BODY' ? '💥' : '🦵';
+    addKillfeed(`${icon} ${hitPart} +${hitDamage} → ${hitTarget.slice(-4)}`);
   }
 }
 
