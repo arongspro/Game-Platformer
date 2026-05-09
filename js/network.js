@@ -24,11 +24,17 @@ export class Network {
     this.otherPlayers = {};
     this.myHealth     = 100;
 
+    // 리스폰 무적 시간 관리
+    // 이 시각 이전에 날아온 hit는 무시
+    this._respawnTime = Date.now();
+    // 리스폰 후 무적 시간 (ms) - 3초
+    this._invincibleDuration = 3000;
+
     this.onPlayersUpdate = null;
     this.onHealthUpdate  = null;
     this.onHit           = null;
 
-    this._lastSend   = 0;
+    this._lastSend    = 0;
     this._sendInterval = 50; // 20hz
 
     this._setupListeners();
@@ -51,6 +57,23 @@ export class Network {
     onValue(hitRef, snapshot => {
       const data = snapshot.val();
       if (!data) return;
+
+      // ── 핵심 수정 1: 리스폰 이전에 날아온 hit 무시 ──
+      const hitTs = data.ts || 0;
+      if (hitTs < this._respawnTime) {
+        console.log('[🛡️] 리스폰 이전 hit 무시 (old ts)');
+        remove(hitRef);
+        return;
+      }
+
+      // ── 핵심 수정 2: 무적 시간 중 hit 무시 ──
+      const now = Date.now();
+      if (now - this._respawnTime < this._invincibleDuration) {
+        console.log('[🛡️] 무적 시간 중 hit 무시');
+        remove(hitRef);
+        return;
+      }
+
       this.myHealth = Math.max(0, this.myHealth - (data.damage || 15));
       if (this.onHealthUpdate) this.onHealthUpdate(this.myHealth);
       if (this.onHit) this.onHit(data.damage || 15);
@@ -68,15 +91,41 @@ export class Network {
   }
 
   sendHit(targetId, damage = 15) {
-    set(ref(this.db, `hits/${targetId}`), { damage, from: this.myId, ts: Date.now() }).catch(() => {});
+    set(ref(this.db, `hits/${targetId}`), {
+      damage,
+      from: this.myId,
+      ts:   Date.now()
+    }).catch(() => {});
   }
 
+  // ── 핵심 수정 3: 리스폰 시 HP 리셋 + 타임스탬프 갱신 + hits 노드 삭제 ──
   sendRespawn(posArr) {
-    set(ref(this.db, `players/${this.myId}`), { pos: posArr, health_reset: true, ts: Date.now() }).catch(() => {});
+    const now = Date.now();
+
+    // 내 HP 즉시 리셋
+    this.myHealth     = 100;
+    // 리스폰 시각 갱신 → 이 시각 이전 hit는 모두 무시됨
+    this._respawnTime = now;
+
+    // Firebase에 남아있는 내 hit 데이터 즉시 삭제
+    remove(ref(this.db, `hits/${this.myId}`)).catch(() => {});
+
+    // 플레이어 위치 갱신
+    set(ref(this.db, `players/${this.myId}`), {
+      pos:          posArr,
+      health_reset: true,
+      ts:           now
+    }).catch(() => {});
+
+    console.log('[🔄] 리스폰 완료 - HP 100, 무적 3초');
   }
 
   disconnect() {
     remove(ref(this.db, `players/${this.myId}`)).catch(() => {});
+  }
+
+  isInvincible() {
+    return (Date.now() - this._respawnTime) < this._invincibleDuration;
   }
 
   getPlayerCount() {
