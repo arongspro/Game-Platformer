@@ -100,42 +100,30 @@ export class Player {
           }
         });
 
-        // ── obj 크기/방향 파악 후 정규화 ──
-        // obj 좌표계: Z가 총구 방향, Y가 위, 단위가 크므로 스케일 다운
+        // ── OBJ 크기 측정 후 정규화 ──
         const box3 = new THREE.Box3().setFromObject(obj);
         const size = new THREE.Vector3();
         box3.getSize(size);
-        // 가장 긴 축을 기준으로 0.5 유닛으로 정규화
-        const maxDim  = Math.max(size.x, size.y, size.z);
-        const scale   = 0.5 / maxDim;
-
-        // 중심을 원점으로 이동
         const center = new THREE.Vector3();
         box3.getCenter(center);
+        const maxDim = Math.max(size.x, size.y, size.z);
 
         // ── 1인칭 총 ──
+        // 0.65 유닛 크기로 (원본보다 크게)
+        const scale = 0.65 / maxDim;
         const gun1P = obj.clone(true);
         gun1P.scale.setScalar(scale);
-        gun1P.position.set(
-          -center.x * scale,
-          -center.y * scale,
-          -center.z * scale
-        );
-        // M4A1 obj: X=옆, Y=위, Z=총구 앞쪽 → Three 카메라는 -Z가 앞이므로 180도 회전
+        // 중심을 원점으로 + 총구를 앞(-Z)으로 향하게 Y축 180도
+        gun1P.position.set(-center.x * scale, -center.y * scale, -center.z * scale);
         gun1P.rotation.set(0, Math.PI, 0);
         this._fpWeaponGroup.add(gun1P);
         this._gunMesh1P = gun1P;
 
-        // ── 3인칭 총 (bodyGroup의 _gunGroup3P에 삽입) ──
+        // ── 3인칭 총 ──
+        const scale3P = 0.45 / maxDim;
         const gun3P = obj.clone(true);
-        // 3인칭은 좀 더 작게
-        const scale3P = 0.35 / maxDim;
         gun3P.scale.setScalar(scale3P);
-        gun3P.position.set(
-          -center.x * scale3P,
-          -center.y * scale3P,
-          -center.z * scale3P
-        );
+        gun3P.position.set(-center.x * scale3P, -center.y * scale3P, -center.z * scale3P);
         gun3P.rotation.set(0, Math.PI, 0);
         this._gunGroup3P.add(gun3P);
         this._gunMesh3P = gun3P;
@@ -456,8 +444,10 @@ export class Player {
     if (!camCtrl.isFirstPerson) return;
 
     const ads  = this.adsProgress;
-    const hipX = 0.25, hipY = -0.85, hipZ = -0.15;
-    const adsX = 0.0,  adsY = -0.75, adsZ =  0.25;
+    // hip: 오른쪽, 아래, 앞으로 (Z 값을 -0.5로 당겨서 총이 앞에 보이게)
+    const hipX = 0.22, hipY = -0.78, hipZ = -0.55;
+    // ads: 중앙, 약간 위, 더 앞으로
+    const adsX = 0.0,  adsY = -0.68, adsZ = -0.30;
 
     const recoilZ = this.recoilOffset;
     const recoilY = this.recoilOffset * 0.1;
