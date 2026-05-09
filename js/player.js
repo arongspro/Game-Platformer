@@ -392,11 +392,15 @@ export class Player {
 
     // 사망/추락
     if (this.health <= 0 || this.pos.y <= -20) {
-      this.health = this.maxHealth;
-      this.ammo   = this.maxAmmo;
+      // 위치/탄약 리셋 (HP는 onDie 콜백 안 network.sendRespawn에서 리셋)
+      this.ammo      = this.maxAmmo;
+      this.isSliding = false;
+      this.yVel      = 0;
       this.pos.set(0, 1, 5);
-      this.yVel = 0;
-      if (this.onDie)       this.onDie();
+      // onDie 먼저 호출 (network HP 리셋 + 무적 시간 시작)
+      if (this.onDie) this.onDie();
+      // onDie 이후 health 확실히 100
+      this.health = this.maxHealth;
       if (this.onHudUpdate) this.onHudUpdate();
     }
 
@@ -445,7 +449,7 @@ export class Player {
 
     const ads  = this.adsProgress;
     // hip: 오른쪽, 아래, 앞으로 (Z 값을 -0.5로 당겨서 총이 앞에 보이게)
-    const hipX = 0.22, hipY = -0.78, hipZ = -1.0;
+    const hipX = 0.22, hipY = -0.78, hipZ = -0.55;
     // ads: 중앙, 약간 위, 더 앞으로
     const adsX = 0.0,  adsY = -0.68, adsZ = -0.30;
 
