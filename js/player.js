@@ -341,7 +341,7 @@ export class Player {
     // 슬라이드
     if (keys['ShiftLeft'] && !this.isSliding && !this.isJumping && isMoving && this.dashCooldown <= 0) {
       this.isSliding  = true;
-      this.slideSpeed = this.baseSpeed * 3.5;
+      this.slideSpeed = this.baseSpeed * 5.5;
       this.slideDir.copy(moveDir);
       this.dashCooldown = this.dashCooldownMax;
       if (this.onHudUpdate) this.onHudUpdate();
