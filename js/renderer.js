@@ -1,7 +1,7 @@
 // renderer.js - Three.js 씬, 조명, 맵, 원격 플레이어 풀바디
 
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js';
-import { OBJLoader } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/loaders/OBJLoader.js';
+import * as THREE from 'three';
+import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 
 export class Renderer {
   constructor(canvas) {
