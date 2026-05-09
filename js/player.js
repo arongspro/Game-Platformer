@@ -1,7 +1,7 @@
 // player.js - 플레이어 물리/입력/무기 + OBJ 총모델 (m4a1.obj)
 
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js';
-import { OBJLoader } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/loaders/OBJLoader.js';
+import * as THREE from 'three';
+import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 
 export class Player {
   constructor(boxes, renderer) {
