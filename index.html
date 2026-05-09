@@ -1,28 +1,107 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
   <title>VOID PROTOCOL — Multiplayer FPS</title>
 
-  <!-- importmap: "three" bare specifier → CDN URL로 매핑 -->
   <script type="importmap">
   {
     "imports": {
-      "three": "https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js",
+      "three":  "https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js",
       "three/": "https://cdn.jsdelivr.net/npm/three@0.158.0/"
     }
   }
   </script>
 
-  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/style.css"/>
   <style>
-    #lock-overlay { pointer-events: all !important; }
-    #lock-btn {
-      pointer-events: all !important;
-      position: relative;
-      z-index: 200;
-      cursor: pointer;
+    #lock-overlay { pointer-events:all !important; }
+    #lock-btn { pointer-events:all !important; z-index:200; cursor:pointer; }
+
+    /* ── 스코어보드 (TAB) ── */
+    #scoreboard {
+      display: none;
+      position: fixed;
+      inset: 0;
+      align-items: center;
+      justify-content: center;
+      z-index: 60;
+      background: rgba(0,0,0,0.6);
+      backdrop-filter: blur(6px);
+    }
+    .sb-panel {
+      width: 580px;
+      background: rgba(0,0,0,0.85);
+      border: 1px solid rgba(0,255,224,0.35);
+      padding: 0;
+      font-family: 'Share Tech Mono', monospace;
+    }
+    .sb-title {
+      font-family: 'Orbitron', monospace;
+      font-size: 13px;
+      letter-spacing: 6px;
+      color: #00ffe0;
+      padding: 14px 24px;
+      border-bottom: 1px solid rgba(0,255,224,0.15);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .sb-hint { font-size:9px; opacity:.35; letter-spacing:3px; }
+    .sb-header {
+      display: grid;
+      grid-template-columns: 40px 1fr 70px 70px 70px;
+      padding: 8px 24px;
+      font-size: 9px;
+      letter-spacing: 3px;
+      opacity: .4;
+      border-bottom: 1px solid rgba(0,255,224,0.08);
+    }
+    .sb-rows { max-height: 320px; overflow-y: auto; }
+    .sb-row {
+      display: grid;
+      grid-template-columns: 40px 1fr 70px 70px 70px;
+      padding: 10px 24px;
+      font-size: 13px;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      transition: background .1s;
+    }
+    .sb-row:hover { background: rgba(255,255,255,0.03); }
+    .sb-me {
+      background: rgba(0,255,224,0.07) !important;
+      color: #00ffe0;
+    }
+    .sb-rank  { opacity:.4; }
+    .sb-kills { color:#00ffe0; text-align:center; }
+    .sb-deaths{ color:#ff6666; text-align:center; }
+    .sb-kd    { color:#ffcc00; text-align:center; }
+    .killfeed-kill { border-left-color: #ffcc00 !important; color: #ffcc00; }
+
+    /* ── 내 닉네임 표시 ── */
+    #my-nick-wrap {
+      position: fixed;
+      top: 32px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-family: 'Orbitron', monospace;
+      font-size: 11px;
+      letter-spacing: 4px;
+      color: rgba(0,255,224,0.5);
+      pointer-events: none;
+      z-index: 10;
+    }
+    #my-nick { color: #00ffe0; }
+
+    /* TAB 힌트 */
+    #tab-hint {
+      position: fixed;
+      bottom: 130px;
+      right: 32px;
+      font-size: 9px;
+      letter-spacing: 3px;
+      opacity: .25;
+      pointer-events: none;
     }
   </style>
 </head>
@@ -60,14 +139,39 @@
   </div>
 </div>
 
+<!-- 내 닉네임 -->
+<div id="my-nick-wrap">▶ <span id="my-nick">PLAYER</span></div>
+
+<!-- TAB 힌트 -->
+<div id="tab-hint">[ TAB ] SCOREBOARD</div>
+
+<!-- 스코어보드 -->
+<div id="scoreboard">
+  <div class="sb-panel">
+    <div class="sb-title">
+      <span>SCOREBOARD</span>
+      <span class="sb-hint">RELEASE TAB TO CLOSE</span>
+    </div>
+    <div class="sb-header">
+      <span>RANK</span>
+      <span>PLAYER</span>
+      <span style="text-align:center">KILLS</span>
+      <span style="text-align:center">DEATHS</span>
+      <span style="text-align:center">K/D</span>
+    </div>
+    <div class="sb-rows"></div>
+  </div>
+</div>
+
 <!-- 포인터 락 오버레이 -->
 <div id="lock-overlay">
   <h1>VOID PROTOCOL</h1>
   <p>MULTIPLAYER · PARKOUR · FPS</p>
   <button id="lock-btn" type="button">[ ENTER ]</button>
-  <p style="font-size:11px;opacity:0.35;letter-spacing:3px;margin-top:24px">
+  <p style="font-size:11px;opacity:.35;letter-spacing:3px;margin-top:24px">
     WASD 이동 &nbsp;|&nbsp; SPACE 점프 &nbsp;|&nbsp; SHIFT 대시<br/><br/>
-    우클릭 조준 &nbsp;|&nbsp; R 재장전 &nbsp;|&nbsp; M 사격모드 &nbsp;|&nbsp; 휠 줌
+    우클릭 조준 &nbsp;|&nbsp; R 재장전 &nbsp;|&nbsp; M 사격모드 &nbsp;|&nbsp; 휠 줌<br/><br/>
+    TAB 스코어보드
   </p>
 </div>
 
