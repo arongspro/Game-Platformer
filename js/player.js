@@ -2,6 +2,7 @@
 
 import * as THREE from 'three';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
+import { GrenadeSystem } from './grenade.js';
 
 export class Player {
   constructor(boxes, renderer) {
@@ -52,6 +53,18 @@ export class Player {
     this.boxes    = boxes;
     this.renderer = renderer;
 
+    // 무기 슬롯: 1=총, 4=수류탄
+    this.weaponSlot    = 1;
+    this.grenadeCount  = 3;        // 수류탄 재고
+    this.grenadeCharge = 0;        // 좌클릭 홀드 시간 (0~60프레임)
+    this.grenadeMaxCharge = 90;    // 최대 충전 프레임
+    this.isChargingGrenade = false;
+    this._slot4Held   = false;
+    this._slot1Held   = false;
+
+    // 수류탄 시스템 (renderer.scene 필요하므로 나중에 init)
+    this.grenadeSystem = null;
+
     // 입력
     this.keys  = {};
     this.mouse = { left: false, right: false };
@@ -75,8 +88,27 @@ export class Player {
     this._fpWeaponGroup.position.set(0.25, -0.85, -0.15);
     renderer.weaponScene.add(this._fpWeaponGroup);
 
+    // 1인칭 수류탄 그룹
+    this._fpGrenadeGroup = new THREE.Group();
+    this._fpGrenadeGroup.visible = false;
+    const gGeo = new THREE.SphereGeometry(0.07, 8, 8);
+    const gMat = new THREE.MeshLambertMaterial({ color: 0x2d4a1e });
+    const gMesh = new THREE.Mesh(gGeo, gMat);
+    // 핀
+    const pinGeo = new THREE.CylinderGeometry(0.005, 0.005, 0.06, 6);
+    const pinMat = new THREE.MeshLambertMaterial({ color: 0xdddddd });
+    const pin = new THREE.Mesh(pinGeo, pinMat);
+    pin.position.set(0.04, 0.07, 0);
+    pin.rotation.z = Math.PI/4;
+    this._fpGrenadeGroup.add(gMesh, pin);
+    this._fpGrenadeGroup.position.set(0.18, -0.80, -0.40);
+    renderer.weaponScene.add(this._fpGrenadeGroup);
+
     // OBJ 비동기 로드
     this._loadGun(renderer);
+
+    // 수류탄 시스템 초기화
+    this.grenadeSystem = new GrenadeSystem(renderer.scene, boxes);
   }
 
   // ─────────────────────────────────────────
@@ -338,22 +370,56 @@ export class Player {
     if (keys['KeyA']) { moveDir.addScaledVector(right, -1); targetTilt -= 3; }
     if (keys['KeyD']) { moveDir.addScaledVector(right,  1); targetTilt += 3; }
 
-    // M키 사격모드
-    if (keys['KeyM']) {
-      if (!this.mKeyHeld) {
-        this.fireMode = this.fireMode === 'AUTO' ? 'SEMI' : 'AUTO';
-        this.mKeyHeld = true;
-        if (this.onHudUpdate) this.onHudUpdate();
-      }
-    } else { this.mKeyHeld = false; }
+    // 무기 슬롯 전환
+    if (keys['Digit1'] && !this._slot1Held) { this.weaponSlot = 1; this._slot1Held = true; if (this.onHudUpdate) this.onHudUpdate(); }
+    if (!keys['Digit1']) this._slot1Held = false;
+    if (keys['Digit4'] && !this._slot4Held && this.grenadeCount > 0) { this.weaponSlot = 4; this._slot4Held = true; if (this.onHudUpdate) this.onHudUpdate(); }
+    if (!keys['Digit4']) this._slot4Held = false;
 
-    // 사격
+    // M키 사격모드 (총 슬롯에서만)
+    if (this.weaponSlot === 1) {
+      if (keys['KeyM']) {
+        if (!this.mKeyHeld) {
+          this.fireMode = this.fireMode === 'AUTO' ? 'SEMI' : 'AUTO';
+          this.mKeyHeld = true;
+          if (this.onHudUpdate) this.onHudUpdate();
+        }
+      } else { this.mKeyHeld = false; }
+    }
+
+    // ── 슬롯별 좌클릭 동작 ──
     this.fireCooldown = Math.max(0, this.fireCooldown - 1);
-    if (mouse.left) {
-      if (this.fireMode === 'AUTO') {
-        if (this.fireCooldown === 0) { this.shoot(checkHitFn); this.fireCooldown = this.fireRate; }
-      } else {
-        if (!this.mouseLeftHeld) { this.shoot(checkHitFn); this.mouseLeftHeld = true; }
+
+    if (this.weaponSlot === 1) {
+      // 총: 기존 사격
+      if (mouse.left) {
+        if (this.fireMode === 'AUTO') {
+          if (this.fireCooldown === 0) { this.shoot(checkHitFn); this.fireCooldown = this.fireRate; }
+        } else {
+          if (!this.mouseLeftHeld) { this.shoot(checkHitFn); this.mouseLeftHeld = true; }
+        }
+      } else { this.mouseLeftHeld = false; }
+      this.isChargingGrenade = false;
+      this.grenadeCharge = 0;
+
+    } else if (this.weaponSlot === 4) {
+      // 수류탄: 좌클릭 홀드로 충전, 떼면 투척
+      if (mouse.left && this.grenadeCount > 0) {
+        this.isChargingGrenade = true;
+        this.grenadeCharge = Math.min(this.grenadeCharge + 1, this.grenadeMaxCharge);
+      } else if (!mouse.left && this.isChargingGrenade) {
+        // 마우스 뗌 → 투척
+        const power = this.grenadeCharge / this.grenadeMaxCharge;
+        if (this.grenadeSystem) {
+          const yawRad = THREE.MathUtils.degToRad(camCtrl.yaw);
+          const throwFront = new THREE.Vector3(Math.cos(yawRad), 0, Math.sin(yawRad));
+          this.grenadeSystem.throw(this.pos.clone(), throwFront, camCtrl.pitch, power);
+          this.grenadeCount--;
+          if (this.grenadeCount === 0) this.weaponSlot = 1; // 다 쓰면 총으로
+        }
+        this.grenadeCharge = 0;
+        this.isChargingGrenade = false;
+        if (this.onHudUpdate) this.onHudUpdate();
       }
     }
 
@@ -448,6 +514,7 @@ export class Player {
 
     this._updateLocalBody(camCtrl);
     this._updateFirstPersonWeapon(camCtrl);
+    if (this.grenadeSystem) this.grenadeSystem.update();
   }
 
   // ─────────────────────────────────────────
@@ -485,9 +552,32 @@ export class Player {
   // 1인칭 무기 업데이트 (Python draw_first_person_weapon 직역)
   // ─────────────────────────────────────────
   _updateFirstPersonWeapon(camCtrl) {
-    // 3인칭이면 1인칭 무기 숨김
-    this._fpWeaponGroup.visible = camCtrl.isFirstPerson;
-    if (!camCtrl.isFirstPerson) return;
+    const fp = camCtrl.isFirstPerson;
+
+    // 슬롯에 따라 표시/숨김
+    this._fpWeaponGroup.visible  = fp && this.weaponSlot === 1;
+    this._fpGrenadeGroup.visible = fp && this.weaponSlot === 4;
+
+    if (!fp) return;
+
+    // ── 수류탄 슬롯 애니메이션 ──
+    if (this.weaponSlot === 4) {
+      // 충전할수록 살짝 뒤로 당기는 모션
+      const charge = this.grenadeCharge / this.grenadeMaxCharge;
+      const bob = Math.sin(this.moveTime * 10) * 0.004 * this.bobAmp;
+      this._fpGrenadeGroup.position.set(
+        0.18 + charge * 0.04,
+        -0.80 - charge * 0.08 + bob,
+        -0.40 + charge * 0.12
+      );
+      // 충전 시 살짝 흔들기
+      this._fpGrenadeGroup.rotation.set(
+        Math.sin(this.moveTime * 7) * 0.02 * this.bobAmp,
+        Math.PI * 0.05,
+        charge * -0.15
+      );
+      return;
+    }
 
     const ads  = this.adsProgress;
     // hip: 오른쪽, 아래, 앞으로 (Z 값을 -0.5로 당겨서 총이 앞에 보이게)
