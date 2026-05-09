@@ -90,7 +90,7 @@ export class Player {
     });
 
     loader.load(
-      '../m4a1.obj',          // index.html 기준 경로
+      './m4a1.obj',          // index.html 기준 경로
       (obj) => {
         // 전체 머티리얼 통일 + 그림자
         obj.traverse(child => {
