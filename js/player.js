@@ -445,7 +445,7 @@ export class Player {
 
     const ads  = this.adsProgress;
     // hip: 오른쪽, 아래, 앞으로 (Z 값을 -0.5로 당겨서 총이 앞에 보이게)
-    const hipX = 0.22, hipY = -0.78, hipZ = -0.55;
+    const hipX = 0.22, hipY = -0.78, hipZ = -1.0;
     // ads: 중앙, 약간 위, 더 앞으로
     const adsX = 0.0,  adsY = -0.68, adsZ = -0.30;
 
