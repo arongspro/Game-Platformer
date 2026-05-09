@@ -29,8 +29,12 @@ const ammoMode      = document.getElementById('ammo-mode');
 const dashCdEl      = document.getElementById('dash-cd');
 const playerCountEl = document.getElementById('player-count');
 const killfeed      = document.getElementById('killfeed');
-const scoreboardEl  = document.getElementById('scoreboard');
-const myNickEl      = document.getElementById('my-nick');
+const scoreboardEl      = document.getElementById('scoreboard');
+const myNickEl          = document.getElementById('my-nick');
+const grenadeChargeEl   = document.getElementById('grenade-charge');
+const grenadeChargeFill = document.getElementById('grenade-charge-fill');
+const slot1El           = document.getElementById('slot-1');
+const slot4El           = document.getElementById('slot-4');
 
 // 닉네임 표시
 myNickEl.textContent = userInfo.nickname;
@@ -150,9 +154,16 @@ function updateHud() {
   else if (pct <= 0.6) { healthFill.classList.add('warn'); healthNum.style.color = '#ffcc00'; }
   else                 { healthNum.style.color = ''; }
 
-  ammoCurrentEl.textContent = player.ammo;
-  ammoMaxEl.textContent     = '/ ' + player.maxAmmo;
-  ammoMode.textContent      = '[' + player.fireMode + ']';
+  if (player.weaponSlot === 1) {
+    ammoCurrentEl.textContent = player.ammo;
+    ammoMaxEl.textContent     = '/ ' + player.maxAmmo;
+    ammoMode.textContent      = '[' + player.fireMode + ']';
+  } else if (player.weaponSlot === 4) {
+    ammoCurrentEl.textContent = '💣 ' + player.grenadeCount;
+    ammoMaxEl.textContent     = '/ 3';
+    const charge = Math.round((player.grenadeCharge / player.grenadeMaxCharge) * 100);
+    ammoMode.textContent      = player.isChargingGrenade ? `[CHARGE ${charge}%]` : '[GRENADE]';
+  }
   reloadBar.classList.toggle('visible', player.isReloading);
 
   const invincible = network.isInvincible();
@@ -297,6 +308,21 @@ function loop() {
 
     renderer.updateParticles(dt);
     network.sendUpdate(player.getSnapshot(camCtrl));
+
+    // ── 수류탄 충전바 / 슬롯 UI ──
+    if (player.weaponSlot === 4 && player.isChargingGrenade) {
+      grenadeChargeEl.classList.add('visible');
+      const pct = (player.grenadeCharge / player.grenadeMaxCharge) * 100;
+      grenadeChargeFill.style.width = pct + '%';
+    } else {
+      grenadeChargeEl.classList.remove('visible');
+    }
+    // 슬롯 하이라이트
+    if (slot1El && slot4El) {
+      slot1El.classList.toggle('active', player.weaponSlot === 1);
+      slot4El.classList.toggle('active', player.weaponSlot === 4);
+      slot4El.textContent = `[ 4 ] GRENADE ×${player.grenadeCount}`;
+    }
   }
 
   renderer.render(renderer.camera);
