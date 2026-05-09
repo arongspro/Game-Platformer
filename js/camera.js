@@ -1,6 +1,6 @@
 // camera.js - 1인칭/3인칭 카메라 (roll 뒤집힘 버그 수정, 워킹밥 정확 구현)
 
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js';
+import * as THREE from 'three';
 
 export class CameraController {
   constructor(threeCamera) {
