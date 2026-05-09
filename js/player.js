@@ -365,7 +365,7 @@ export class Player {
     }
 
     // 점프
-    if (keys['Space'] && !this.isJumping && !this.isSliding) {
+    if (keys['Space'] && !this.isJumping) {
       this.yVel = this.jumpStr;
       this.isJumping = true;
     }
