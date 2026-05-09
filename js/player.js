@@ -21,7 +21,7 @@ export class Player {
     this.slideSpeed      = 0;
     this.slideDir        = new THREE.Vector3();
     this.dashCooldown    = 0;
-    this.dashCooldownMax = 10;
+    this.dashCooldownMax = 90;
 
     // 애니메이션
     this.moveTime    = 0;
@@ -216,7 +216,63 @@ export class Player {
     this._gunGroup3P.position.set(0.35, 1.22, 1.2);
     this.bodyGroup.add(this._gunGroup3P);
 
+    // 픽셀 텍스처 적용 대상 메시 목록
+    this._bodyMeshes = [body, head, legL, legR, armR, armL];
+
     scene.add(this.bodyGroup);
+  }
+
+  // ── 로컬 픽셀 텍스처 적용 ──
+  applyPixels(pixels, renderer) {
+    if (!pixels || !this._bodyMeshes) return;
+    const size = 16;
+    const data = new Uint8Array(size * size * 4);
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const col = pixels[y]?.[x];
+        const i   = (y * size + x) * 4;
+        if (col && col !== 'null' && col.startsWith('#')) {
+          data[i]   = parseInt(col.slice(1,3),16);
+          data[i+1] = parseInt(col.slice(3,5),16);
+          data[i+2] = parseInt(col.slice(5,7),16);
+          data[i+3] = 255;
+        } else {
+          data[i]=data[i+1]=data[i+2]=data[i+3]=0;
+        }
+      }
+    }
+    const tex = new THREE.DataTexture(data, size, size);
+    tex.colorSpace  = THREE.SRGBColorSpace;
+    tex.magFilter   = THREE.NearestFilter;
+    tex.minFilter   = THREE.NearestFilter;
+    tex.needsUpdate = true;
+
+    // 부위별 평균색 계산
+    const avg = (x0,x1,y0,y1) => {
+      let r=0,g=0,b=0,n=0;
+      for (let y=y0;y<=y1;y++) for (let x=x0;x<=x1;x++) {
+        const col=pixels[y]?.[x];
+        if(col&&col!=='null'&&col.startsWith('#')){
+          r+=parseInt(col.slice(1,3),16);
+          g+=parseInt(col.slice(3,5),16);
+          b+=parseInt(col.slice(5,7),16); n++;
+        }
+      }
+      return n ? new THREE.Color(r/n/255, g/n/255, b/n/255) : new THREE.Color(0x888888);
+    };
+
+    const [body, head, legL, legR, armR, armL] = this._bodyMeshes;
+    const setMat = (mesh, color) => {
+      mesh.material.color.copy(color);
+      mesh.material.map = tex;
+      mesh.material.needsUpdate = true;
+    };
+    setMat(head, avg(4, 11, 0,  4));
+    setMat(body, avg(3, 12, 5, 10));
+    setMat(legL, avg(4, 11, 11,15));
+    setMat(legR, avg(4, 11, 11,15));
+    setMat(armR, avg(0, 15, 5,  9));
+    setMat(armL, avg(0, 15, 5,  9));
   }
 
   // ─────────────────────────────────────────
@@ -341,7 +397,7 @@ export class Player {
     // 슬라이드
     if (keys['ShiftLeft'] && !this.isSliding && !this.isJumping && isMoving && this.dashCooldown <= 0) {
       this.isSliding  = true;
-      this.slideSpeed = this.baseSpeed * 5.5;
+      this.slideSpeed = this.baseSpeed * 3.5;
       this.slideDir.copy(moveDir);
       this.dashCooldown = this.dashCooldownMax;
       if (this.onHudUpdate) this.onHudUpdate();
@@ -365,8 +421,7 @@ export class Player {
     }
 
     // 점프
-    if (keys['Space'] && !this.isJumping) {
-      this.isSliding  = false;
+    if (keys['Space'] && !this.isJumping && !this.isSliding) {
       this.yVel = this.jumpStr;
       this.isJumping = true;
     }
