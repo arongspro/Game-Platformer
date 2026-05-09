@@ -356,30 +356,22 @@ export class Renderer {
     // 총 반동
     gunGroup.rotation.x = recoil * -0.3;
 
-    // ── 픽셀 텍스처 적용 ──
+    // ── 픽셀 → 부위별 평균색 단색 적용 ──
     const pixels = info.pixels;
     const pixelKey = pixels ? JSON.stringify(pixels) : null;
     if (pixelKey && pixelKey !== parts._lastPixelKey) {
-      const tex = this._pixelsToTexture(pixels);
-      // 픽셀 이미지를 16×16 DataTexture로 만들어 전신에 적용
-      // 각 부위 색상은 픽셀 텍스처의 평균색으로 tint
-      const regions = {
-        // 머리: 픽셀 y=0~4 행 평균색
-        head:  this._avgColor(pixels, 4, 11, 0,  4),
-        // 몸통: y=5~10
-        body:  this._avgColor(pixels, 3, 12, 5, 10),
-        // 다리: y=11~15
-        legs:  this._avgColor(pixels, 4, 11, 11, 15),
-        // 팔: 좌우 각각
-        arms:  this._avgColor(pixels, 0, 15, 5,  9),
-      };
       const [body, head, legL, legR, armR, armL] = parts.bodyMeshes;
-      head.material.color.set(regions.head);  head.material.map = tex;  head.material.needsUpdate = true;
-      body.material.color.set(regions.body);  body.material.map = tex;  body.material.needsUpdate = true;
-      legL.material.color.set(regions.legs);  legL.material.map = tex;  legL.material.needsUpdate = true;
-      legR.material.color.set(regions.legs);  legR.material.map = tex;  legR.material.needsUpdate = true;
-      armR.material.color.set(regions.arms);  armR.material.map = tex;  armR.material.needsUpdate = true;
-      armL.material.color.set(regions.arms);  armL.material.map = tex;  armL.material.needsUpdate = true;
+      const setColor = (mesh, col) => {
+        mesh.material.map = null;
+        mesh.material.color.set(col);
+        mesh.material.needsUpdate = true;
+      };
+      setColor(head, this._avgColor(pixels, 4, 11,  0,  4));
+      setColor(body, this._avgColor(pixels, 3, 12,  5, 10));
+      setColor(legL, this._avgColor(pixels, 4,  7, 11, 15));
+      setColor(legR, this._avgColor(pixels, 8, 11, 11, 15));
+      setColor(armR, this._avgColor(pixels,13, 15,  5,  9));
+      setColor(armL, this._avgColor(pixels, 0,  2,  5,  9));
       parts._lastPixelKey = pixelKey;
     }
 
