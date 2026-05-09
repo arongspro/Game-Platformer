@@ -349,7 +349,7 @@ export class Renderer {
         const box3 = new THREE.Box3().setFromObject(obj);
         const size = new THREE.Vector3(); box3.getSize(size);
         const maxDim = Math.max(size.x, size.y, size.z);
-        this._sharedGunScale = 0.35 / maxDim;
+        this._sharedGunScale = 0.45 / maxDim;
         box3.getCenter(this._sharedGunCenter);
         this._sharedGunObj = obj;
         console.log('[✅] renderer: m4a1.obj 공유 로드 완료');
