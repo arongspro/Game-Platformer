@@ -340,7 +340,7 @@ export class Renderer {
     const gunMat = new THREE.MeshLambertMaterial({ color: 0x1a1a1a, map: this.texWeapon });
 
     loader.load(
-      '../m4a1.obj',
+      './m4a1.obj',
       (obj) => {
         obj.traverse(child => {
           if (child.isMesh) { child.material = gunMat.clone(); child.castShadow = true; }
