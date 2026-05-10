@@ -26,7 +26,7 @@ export class Network {
 
     this.otherPlayers = {};
     this.myHealth     = 100;
-    this.roomId       = localStorage.getItem('vp_room_id') || 'public';
+    this.roomId       = (localStorage.getItem('vp_room_id') || 'PUBLIC').toUpperCase();
     this.roomName     = localStorage.getItem('vp_room_name') || 'PUBLIC';
     this.matchLimit   = Number(localStorage.getItem('vp_match_limit') || 10);
     this.roomStatus   = 'waiting';
@@ -139,7 +139,7 @@ export class Network {
     const snap = await get(metaRef).catch(() => null);
     if (snap?.exists()) return;
     await set(metaRef, {
-      id: this.roomId,
+      id: this.roomId.toUpperCase(),
       name: this.roomName || this.roomId,
       host: this.myId,
       limit: this.matchLimit,
@@ -171,8 +171,9 @@ export class Network {
     candidates.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
     const room = candidates.find(meta => meta.id !== this.roomId);
     if (room) {
-      await this.joinRoom(room.id);
-      return room.id;
+      const rid = String(room.id).trim().toUpperCase();
+      await this.joinRoom(rid);
+      return rid;
     }
     return this.createRoom(limit);
   }
