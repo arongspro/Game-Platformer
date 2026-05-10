@@ -17,7 +17,14 @@ const FIREBASE_CONFIG = {
 
 // 배포 시 GitHub Actions가 위 플레이스홀더를 실제 값으로 치환합니다
 if (FIREBASE_CONFIG.apiKey.startsWith('__')) {
-  console.warn('⚠️ Firebase 환경 변수가 주입되지 않았습니다. GitHub Actions 로그를 확인하세요.');
+  // 치환 실패 → 앱 실행 중단 (Firebase Fatal Error 방지)
+  document.body.innerHTML = `
+    <div style="color:#ff4444;font-family:monospace;padding:40px;background:#111;height:100vh;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:16px">
+      <div style="font-size:2rem">⚠️ 배포 설정 오류</div>
+      <div>Firebase 환경 변수가 주입되지 않았습니다.</div>
+      <div style="color:#888;font-size:0.85rem">GitHub Actions → Inject Secrets 스텝 로그를 확인하세요.</div>
+    </div>`;
+  throw new Error('Firebase 환경 변수 미주입 — 앱 실행 중단');
 }
 
 const fireApp = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
