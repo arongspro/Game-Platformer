@@ -20,6 +20,58 @@
   <style>
     #lock-overlay { pointer-events:all !important; }
     #lock-btn { pointer-events:all !important; z-index:200; cursor:pointer; }
+    #combat-navbar {
+      position: fixed;
+      top: 18px;
+      left: 24px;
+      right: 24px;
+      height: 46px;
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      z-index: 12;
+      pointer-events: none;
+      animation: navDrop .55s cubic-bezier(.16,1,.3,1) both;
+    }
+    .nav-brand {
+      justify-self: start;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-family: 'Orbitron', monospace;
+      font-size: 12px;
+      letter-spacing: 4px;
+      color: rgba(0,255,224,.82);
+      text-shadow: 0 0 18px rgba(0,255,224,.25);
+    }
+    .nav-brand::before {
+      content: '';
+      width: 9px;
+      height: 9px;
+      border: 1px solid #00ffe0;
+      box-shadow: 0 0 14px rgba(0,255,224,.6);
+      transform: rotate(45deg);
+      animation: navPulse 1.8s ease-in-out infinite;
+    }
+    .nav-center {
+      justify-self: center;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-width: min(520px, 52vw);
+      justify-content: center;
+      padding: 8px 18px;
+      background: linear-gradient(90deg, transparent, rgba(0,0,0,.52) 12%, rgba(0,0,0,.68) 50%, rgba(0,0,0,.52) 88%, transparent);
+      border-top: 1px solid rgba(0,255,224,.18);
+      border-bottom: 1px solid rgba(0,255,224,.18);
+      box-shadow: 0 0 34px rgba(0,255,224,.05);
+    }
+    .nav-right {
+      justify-self: end;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
 
     /* ── 스코어보드 (TAB) ── */
     #scoreboard {
@@ -82,10 +134,8 @@
 
     /* ── 내 닉네임 표시 ── */
     #my-nick-wrap {
-      position: fixed;
-      top: 32px;
-      left: 50%;
-      transform: translateX(-50%);
+      position: static;
+      transform: none;
       font-family: 'Orbitron', monospace;
       font-size: 11px;
       letter-spacing: 4px;
@@ -183,11 +233,10 @@
     .slot-count { font-size: 9px; opacity: 0.6; }
 
     #match-panel {
-      position: fixed;
-      top: 66px;
-      left: 32px;
-      display: grid;
-      gap: 3px;
+      position: static;
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
       pointer-events: none;
       text-align: left;
     }
@@ -202,6 +251,8 @@
       font-size: 22px;
       font-weight: 900;
       color: #ffffff;
+      min-width: 58px;
+      text-align: center;
     }
     #match-status {
       font-size: 10px;
@@ -211,9 +262,7 @@
     #match-status.base { color: #00ee88; opacity: 1; }
     #match-status.victory { color: #ffcc00; opacity: 1; }
     #tier-panel {
-      position: fixed;
-      top: 64px;
-      right: 32px;
+      position: static;
       display: flex;
       align-items: center;
       gap: 10px;
@@ -229,6 +278,7 @@
       font-size: 18px;
       font-weight: 900;
       transform: rotate(45deg);
+      animation: tierFloat 2.6s ease-in-out infinite;
     }
     #tier-badge span { transform: rotate(-45deg); }
     #tier-text { text-align: right; }
@@ -244,7 +294,7 @@
       opacity: .55;
     }
     #match-limit-wrap {
-      margin-top: 18px;
+      margin: 0;
       font-size: 10px;
       letter-spacing: 3px;
       opacity: .65;
@@ -261,14 +311,21 @@
       pointer-events: auto;
     }
     #room-panel {
-      margin-top: 18px;
-      width: min(520px, 92vw);
+      margin-top: 22px;
+      width: min(680px, 92vw);
       display: grid;
-      grid-template-columns: 1fr auto auto;
-      gap: 8px;
+      grid-template-columns: 1fr auto auto auto;
+      gap: 10px;
       align-items: center;
       pointer-events: auto;
       font-family: 'Share Tech Mono', monospace;
+      padding: 14px;
+      background:
+        linear-gradient(90deg, rgba(0,255,224,.18), transparent 18%, transparent 82%, rgba(255,204,0,.16)),
+        rgba(0,0,0,.42);
+      border: 1px solid rgba(0,255,224,.24);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.03), 0 0 34px rgba(0,255,224,.08);
+      animation: panelWake .5s .18s cubic-bezier(.16,1,.3,1) both;
     }
     #room-info {
       grid-column: 1 / -1;
@@ -304,6 +361,61 @@
       cursor: pointer;
     }
     .room-action:hover { background: rgba(0,255,224,0.16); }
+    #overlay-nav {
+      position: absolute;
+      top: 24px;
+      left: 32px;
+      right: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      pointer-events: none;
+      font-family: 'Orbitron', monospace;
+      font-size: 10px;
+      letter-spacing: 4px;
+      color: rgba(0,255,224,.58);
+      animation: navDrop .55s ease both;
+    }
+    .overlay-nav-links {
+      display: flex;
+      gap: 18px;
+      color: rgba(255,255,255,.34);
+    }
+    .overlay-nav-links span {
+      position: relative;
+      animation: linkFlicker 4s ease-in-out infinite;
+    }
+    #lock-overlay h1 { animation: titleBoot .72s cubic-bezier(.16,1,.3,1) both, titleGlow 2.8s ease-in-out infinite .8s; }
+    #lock-btn { animation: panelWake .52s .28s cubic-bezier(.16,1,.3,1) both; }
+    @keyframes navDrop {
+      from { opacity: 0; transform: translateY(-14px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes panelWake {
+      from { opacity: 0; transform: translateY(12px) scale(.985); filter: blur(3px); }
+      to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+    }
+    @keyframes titleBoot {
+      from { opacity: 0; transform: translateY(12px); letter-spacing: 14px; }
+      to { opacity: 1; transform: translateY(0); letter-spacing: 6px; }
+    }
+    @keyframes titleGlow {
+      0%, 100% { text-shadow: 0 0 24px rgba(0,255,224,.48); }
+      50% { text-shadow: 0 0 42px rgba(0,255,224,.85), 0 0 8px rgba(255,204,0,.35); }
+    }
+    @keyframes navPulse {
+      0%, 100% { opacity: .55; transform: rotate(45deg) scale(.88); }
+      50% { opacity: 1; transform: rotate(45deg) scale(1.12); }
+    }
+    @keyframes tierFloat {
+      0%, 100% { transform: rotate(45deg) translate(0, 0); }
+      50% { transform: rotate(45deg) translate(1px, -1px); }
+    }
+    @keyframes linkFlicker {
+      0%, 96%, 100% { opacity: .52; }
+      97% { opacity: 1; }
+      98% { opacity: .24; }
+    }
   </style>
 </head>
 <body>
@@ -321,22 +433,28 @@
   <div id="sniper-scope" style="display:none; position:fixed; inset:0; pointer-events:none; z-index:90;">
     <canvas id="scope-canvas" style="width:100%;height:100%;"></canvas>
   </div>
-  <div id="player-count">PLAYERS: 1</div>
-  <div id="killfeed"></div>
-
-  <div id="match-panel">
-    <div id="match-goal">10 KILLS</div>
-    <div id="match-kills">0/10</div>
-    <div id="match-status">BASE</div>
-  </div>
-
-  <div id="tier-panel">
-    <div id="tier-text">
-      <div id="tier-name">아이언 V</div>
-      <div id="tier-rating">0 RP</div>
+  <div id="combat-navbar">
+    <div class="nav-brand">VOID PROTOCOL</div>
+    <div class="nav-center">
+      <div id="my-nick-wrap">▶ <span id="my-nick">PLAYER</span></div>
+      <div id="match-panel">
+        <div id="match-goal">10 KILLS</div>
+        <div id="match-kills">0/10</div>
+        <div id="match-status">BASE</div>
+      </div>
     </div>
-    <div id="tier-badge"><span>V</span></div>
+    <div class="nav-right">
+      <div id="player-count">PLAYERS: 1</div>
+      <div id="tier-panel">
+        <div id="tier-text">
+          <div id="tier-name">아이언 V</div>
+          <div id="tier-rating">0 RP</div>
+        </div>
+        <div id="tier-badge"><span>V</span></div>
+      </div>
+    </div>
   </div>
+  <div id="killfeed"></div>
 
   <div id="health-bar">
     <div id="health-label">HEALTH</div>
@@ -361,9 +479,6 @@
     <div id="reload-track"><div id="bandage-fill"></div></div>
   </div>
 </div>
-
-<!-- 내 닉네임 -->
-<div id="my-nick-wrap">▶ <span id="my-nick">PLAYER</span></div>
 
 <!-- TAB 힌트 -->
 <div id="tab-hint">[ TAB ] SCOREBOARD</div>
@@ -427,6 +542,14 @@
 
 <!-- 포인터 락 오버레이 -->
 <div id="lock-overlay">
+  <div id="overlay-nav">
+    <span>VOID NETWORK</span>
+    <div class="overlay-nav-links">
+      <span>ROOMS</span>
+      <span>RANKED</span>
+      <span>LOADOUT</span>
+    </div>
+  </div>
   <h1>VOID PROTOCOL</h1>
   <p>MULTIPLAYER · PARKOUR · FPS</p>
   <button id="lock-btn" type="button">[ ENTER ]</button>

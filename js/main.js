@@ -9,7 +9,10 @@ import { getRatingTier }    from './ranks.js';
 
 // ── 세션 체크 (로그인 안 했으면 login.html로) ──
 const rawUser = sessionStorage.getItem('vp_user');
-if (!rawUser) { window.location.href = 'login.html'; }
+if (!rawUser) {
+  window.location.href = 'login.html';
+  throw new Error('로그인 세션이 없어 login.html로 이동합니다.');
+}
 const userInfo = JSON.parse(rawUser);
 
 // ── DOM ──
