@@ -12,16 +12,16 @@ import { getDatabase, ref, set, onValue, remove, onDisconnect, get, child } from
 // 12번째 줄: ?(Optional Chaining)를 붙여서 에러 방지
 console.log("체크 - DB 주소:", import.meta.env?.VITE_FB_DATABASE_URL || "값 없음");
 
+// network.js
 const FIREBASE_CONFIG = {
-  // 모든 항목에 ?. 를 붙여서 안전하게 가져옵니다.
-  apiKey:            import.meta.env?.VITE_FB_API_KEY,
-  authDomain:        import.meta.env?.VITE_FB_AUTH_DOMAIN,
-  databaseURL:       import.meta.env?.VITE_FB_DATABASE_URL,
-  projectId:         import.meta.env?.VITE_FB_PROJECT_ID,
-  storageBucket:     import.meta.env?.VITE_FB_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env?.VITE_FB_MESSAGING_SENDER_ID,
-  appId:             import.meta.env?.VITE_FB_APP_ID,
-  measurementId:     import.meta.env?.VITE_FB_MEASUREMENT_ID
+  apiKey:            "__VITE_FB_API_KEY__",
+  authDomain:        "__VITE_FB_AUTH_DOMAIN__",
+  databaseURL:       "__VITE_FB_DATABASE_URL__",
+  projectId:         "__VITE_FB_PROJECT_ID__",
+  storageBucket:     "__VITE_FB_STORAGE_BUCKET__",
+  messagingSenderId: "__VITE_FB_MESSAGING_SENDER_ID__",
+  appId:             "__VITE_FB_APP_ID__",
+  measurementId:     "__VITE_FB_MEASUREMENT_ID__"
 };
 
 
