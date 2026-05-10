@@ -28,11 +28,22 @@ export class CameraController {
     this._qRoll = new THREE.Quaternion();
   }
 
-  onMouseMove(dx, dy, isAiming) {
-    const sens = 0.08 * (isAiming ? 0.5 : 1.0);
+  onMouseMove(dx, dy, isAiming, scopeProgress = 0) {
+    const scopeSens = scopeProgress > 0.5 ? 0.15 : 1.0;
+    const sens = 0.08 * (isAiming ? 0.5 : 1.0) * scopeSens;
     this.yaw   += dx * sens;
     this.pitch -= dy * sens;
     this.pitch  = Math.max(-89, Math.min(89, this.pitch));
+  }
+
+  setFovFromScope(scopeProgress) {
+    const baseFov   = 60;
+    const sniperFov = 15;  // 저격 최대 줌
+    const fov = baseFov + (sniperFov - baseFov) * scopeProgress;
+    if (this.camera.fov !== fov) {
+      this.camera.fov = fov;
+      this.camera.updateProjectionMatrix();
+    }
   }
 
   onWheel(delta) {
