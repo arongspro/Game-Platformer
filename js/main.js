@@ -38,8 +38,14 @@ const grenadeChargeFill = document.getElementById('grenade-charge-fill');
 const slot1El           = document.getElementById('slot-1');
 const slot4El           = document.getElementById('slot-4');
 const slot3El           = document.getElementById('slot-3');
+const slot2El           = document.getElementById('slot-2');
+const slot5El           = document.getElementById('slot-5');
 const grenadeCountUI    = document.getElementById('grenade-count-ui');
 const bandageCountUI    = document.getElementById('bandage-count-ui');
+const sniperCountUI     = document.getElementById('sniper-count-ui');
+const pistolCountUI     = document.getElementById('pistol-count-ui');
+const sniperScopeEl     = document.getElementById('sniper-scope');
+const scopeCanvas       = document.getElementById('scope-canvas');
 
 // 닉네임 표시
 myNickEl.textContent = userInfo.nickname;
@@ -87,7 +93,8 @@ document.addEventListener('mousemove', e => {
   camCtrl.onMouseMove(
     e.movementX || e.mozMovementX || 0,
     e.movementY || e.mozMovementY || 0,
-    player.isAiming
+    player.isAiming,
+    player.scopeProgress
   );
 });
 canvas.addEventListener('wheel', e => camCtrl.onWheel(e.deltaY > 0 ? 1 : -1), { passive:true });
@@ -164,13 +171,21 @@ function updateHud() {
     ammoCurrentEl.textContent = player.ammo;
     ammoMaxEl.textContent     = '/ ' + player.maxAmmo + '  [' + player.totalAmmo + ']';
     ammoMode.textContent      = '[' + player.fireMode + ']';
+  } else if (player.weaponSlot === 2) {
+    ammoCurrentEl.textContent = player.sniperAmmo;
+    ammoMaxEl.textContent     = '/ ' + player.sniperMaxAmmo + '  [' + player.sniperTotalAmmo + ']';
+    ammoMode.textContent      = player.sniperReloading ? '[RELOADING...]' : '[SEMI] 🔭';
+  } else if (player.weaponSlot === 5) {
+    ammoCurrentEl.textContent = player.pistolAmmo;
+    ammoMaxEl.textContent     = '/ ' + player.pistolMaxAmmo + '  [' + player.pistolTotalAmmo + ']';
+    ammoMode.textContent      = player.pistolReloading ? '[RELOADING...]' : '[SEMI] 🔫';
   } else if (player.weaponSlot === 4) {
     ammoCurrentEl.textContent = '💣 ' + player.grenadeCount;
     ammoMaxEl.textContent     = '/ 3';
     const charge = Math.round((player.grenadeCharge / player.grenadeMaxCharge) * 100);
     ammoMode.textContent      = player.isChargingGrenade ? `[CHARGE ${charge}%]` : '[GRENADE]';
   }
-  reloadBar.classList.toggle('visible', player.isReloading);
+  reloadBar.classList.toggle('visible', player.isReloading || player.sniperReloading || player.pistolReloading);
   bandageBar.classList.toggle('visible', player.isBandaging);
 
   const invincible = network.isInvincible();
@@ -205,11 +220,19 @@ function addKillfeed(text, isKill = false) {
 }
 
 // ── 부위별 히트박스 레이캐스트 ──
+// 기본 데미지 (M4A1 기준)
 const HITBOXES = [
   { name:'HEAD', offsetY:1.95, halfH:0.27, radius:0.28, damage:20 },
   { name:'BODY', offsetY:1.25, halfH:0.35, radius:0.38, damage:10 },
   { name:'LEGS', offsetY:0.45, halfH:0.45, radius:0.28, damage: 5 },
 ];
+
+// 무기별 데미지 테이블
+const WEAPON_DAMAGE = {
+  rifle:  { HEAD: 20, BODY: 10, LEGS:  5 },
+  sniper: { HEAD:100, BODY: 40, LEGS: 40 },
+  pistol: { HEAD: 30, BODY: 20, LEGS: 10 },
+};
 
 function rayVsCapsule(origin, front, center, halfH, radius) {
   const oc = origin.clone().sub(center);
@@ -265,13 +288,14 @@ function wallBlockDist(origin, front) {
   return minDist;
 }
 
-function checkHit() {
+function checkHit(weaponType = 'rifle') {
   const origin = camCtrl.getHeadPos();
   const front  = camCtrl.getFront();
   let bestDist=200, hitTarget=null, hitDamage=0, hitPart='';
 
   // 벽까지의 거리 — 이보다 멀리 있는 플레이어는 맞지 않음
   const wallDist = wallBlockDist(origin, front);
+  const dmgTable = WEAPON_DAMAGE[weaponType] || WEAPON_DAMAGE.rifle;
 
   for (const [pid, info] of Object.entries(network.otherPlayers)) {
     if (!info?.pos) continue;
@@ -279,9 +303,10 @@ function checkHit() {
     for (const hb of HITBOXES) {
       const center = base.clone(); center.y += hb.offsetY;
       const t = rayVsCapsule(origin, front, center, hb.halfH, hb.radius);
-      if (t < bestDist && t < wallDist) {   // 벽보다 가까울 때만 히트
+      if (t < bestDist && t < wallDist) {
         bestDist = t; hitTarget = pid;
-        hitDamage = hb.damage; hitPart = hb.name;
+        hitDamage = dmgTable[hb.name] ?? hb.damage;
+        hitPart = hb.name;
       }
     }
   }
@@ -292,9 +317,6 @@ function checkHit() {
     const icon = hitPart==='HEAD' ? '🎯' : hitPart==='BODY' ? '💥' : '🦵';
     const targetNick = network.otherPlayers[hitTarget]?.nickname || hitTarget.slice(-4);
     addKillfeed(`${icon} ${hitPart} +${hitDamage} → ${targetNick}`);
-
-    // 타겟 HP 0 예상 → 킬 확인 (서버에서 확인 불가하므로 클라이언트 추정)
-    // 실제로는 network.onHealthUpdate에서 처리
   }
 }
 
@@ -473,6 +495,9 @@ function loop() {
 
     adsVignette.style.opacity = player.adsProgress;
 
+    // 저격 스코프 FOV
+    camCtrl.setFovFromScope(player.weaponSlot === 2 ? player.scopeProgress : 0);
+
     if (hitmarkerTimer > 0) {
       hitmarkerTimer -= dt * 1000;
       if (hitmarkerTimer <= 0) hitmarker.classList.remove('active');
@@ -480,6 +505,10 @@ function loop() {
 
     if (player.isReloading) {
       reloadFill.style.width = ((1 - player.reloadTimer/player.reloadDuration)*100) + '%';
+    } else if (player.sniperReloading) {
+      reloadFill.style.width = ((1 - player.sniperReloadTimer/player.sniperReloadDur)*100) + '%';
+    } else if (player.pistolReloading) {
+      reloadFill.style.width = ((1 - player.pistolReloadTimer/player.pistolReloadDur)*100) + '%';
     }
     if (player.isBandaging) {
       bandageFill.style.width = ((1 - player.bandageTimer/player.bandageDuration)*100) + '%';
@@ -513,10 +542,60 @@ function loop() {
     // 슬롯 하이라이트
     if (slot1El && slot4El && slot3El) {
       slot1El.classList.toggle('active', player.weaponSlot === 1);
+      slot2El && slot2El.classList.toggle('active', player.weaponSlot === 2);
+      slot5El && slot5El.classList.toggle('active', player.weaponSlot === 5);
       slot4El.classList.toggle('active', player.weaponSlot === 4);
       slot3El.classList.toggle('active', player.weaponSlot === 3);
       if (grenadeCountUI) grenadeCountUI.textContent = `×${player.grenadeCount}`;
       if (bandageCountUI) bandageCountUI.textContent = `×${player.bandageCount}`;
+      if (sniperCountUI)  sniperCountUI.textContent  = `×${player.sniperAmmo}`;
+      if (pistolCountUI)  pistolCountUI.textContent  = `×${player.pistolAmmo}`;
+    }
+
+    // ── 저격 스코프 오버레이 ──
+    const scopeOn = player.weaponSlot === 2 && player.scopeProgress > 0.05;
+    sniperScopeEl.style.display = scopeOn ? 'block' : 'none';
+    if (scopeOn) {
+      const W = window.innerWidth, H = window.innerHeight;
+      if (scopeCanvas.width !== W || scopeCanvas.height !== H) {
+        scopeCanvas.width = W; scopeCanvas.height = H;
+      }
+      const ctx2 = scopeCanvas.getContext('2d');
+      ctx2.clearRect(0,0,W,H);
+      const alpha = player.scopeProgress;
+      const cx = W/2, cy = H/2;
+      const r  = Math.min(W,H) * 0.32 * alpha;
+      // 검은 테두리 (비네트)
+      ctx2.fillStyle = `rgba(0,0,0,${0.92 * alpha})`;
+      ctx2.fillRect(0,0,W,H);
+      // 스코프 원형 투명 영역
+      ctx2.save();
+      ctx2.globalCompositeOperation = 'destination-out';
+      ctx2.beginPath();
+      ctx2.arc(cx, cy, r, 0, Math.PI*2);
+      ctx2.fillStyle = 'rgba(0,0,0,1)';
+      ctx2.fill();
+      ctx2.restore();
+      // 십자선
+      ctx2.strokeStyle = `rgba(0,255,100,${0.8*alpha})`;
+      ctx2.lineWidth = 1.5;
+      ctx2.beginPath();
+      ctx2.moveTo(cx - r*0.9, cy); ctx2.lineTo(cx - r*0.15, cy);
+      ctx2.moveTo(cx + r*0.15, cy); ctx2.lineTo(cx + r*0.9, cy);
+      ctx2.moveTo(cx, cy - r*0.9); ctx2.lineTo(cx, cy - r*0.15);
+      ctx2.moveTo(cx, cy + r*0.15); ctx2.lineTo(cx, cy + r*0.9);
+      ctx2.stroke();
+      // 중심점
+      ctx2.beginPath();
+      ctx2.arc(cx, cy, 2, 0, Math.PI*2);
+      ctx2.fillStyle = `rgba(0,255,100,${alpha})`;
+      ctx2.fill();
+      // 스코프 원 테두리
+      ctx2.strokeStyle = `rgba(40,40,40,${alpha})`;
+      ctx2.lineWidth = 3;
+      ctx2.beginPath();
+      ctx2.arc(cx, cy, r, 0, Math.PI*2);
+      ctx2.stroke();
     }
   }
 
