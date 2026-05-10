@@ -53,7 +53,7 @@ body::before {
   position: absolute;
   top: 50%; left: 50%;
   transform: translate(-50%, -50%);
-  width: 20px; height: 20px;
+  width: 26px; height: 26px;
   animation: crosshairIdle 1.8s ease-in-out infinite;
 }
 #crosshair::before, #crosshair::after {
@@ -61,15 +61,16 @@ body::before {
   position: absolute;
   background: rgba(255,255,255,0.85);
 }
-#crosshair::before { width: 2px; height: 100%; left: 50%; transform: translateX(-50%); }
-#crosshair::after  { height: 2px; width: 100%; top: 50%; transform: translateY(-50%); }
+#crosshair::before { width: 2px; height: 72%; left: 50%; top: 14%; transform: translateX(-50%); }
+#crosshair::after  { height: 2px; width: 72%; left: 14%; top: 50%; transform: translateY(-50%); }
 #crosshair .dot {
   position: absolute;
-  width: 3px; height: 3px;
-  background: #fff;
+  width: 5px; height: 5px;
+  background: #00ffe0;
   border-radius: 50%;
   top: 50%; left: 50%;
   transform: translate(-50%,-50%);
+  box-shadow: 0 0 10px rgba(0,255,224,.65);
 }
 @keyframes crosshairIdle {
   0%, 100% { opacity: .82; filter: drop-shadow(0 0 2px rgba(255,255,255,.25)); }

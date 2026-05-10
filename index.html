@@ -191,46 +191,53 @@
     /* 무기 슬롯 표시 */
     #weapon-slots {
       position: fixed;
-      bottom: 170px;
-      right: 32px;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      align-items: flex-end;
+      bottom: 108px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: grid;
+      grid-template-columns: repeat(5, minmax(92px, auto));
+      gap: 8px;
+      align-items: end;
       pointer-events: none;
+      animation: panelWake .45s .12s cubic-bezier(.16,1,.3,1) both;
     }
     .weapon-slot {
-      display: flex;
+      min-height: 48px;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
       font-size: 10px;
-      letter-spacing: 3px;
-      opacity: 0.3;
+      letter-spacing: 2px;
+      opacity: 0.42;
       transition: all 0.15s;
-      padding: 4px 10px 4px 8px;
-      border: 1px solid transparent;
+      padding: 8px 10px;
+      border: 1px solid rgba(255,255,255,.08);
       border-radius: 2px;
+      background: rgba(0,0,0,.38);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.025);
     }
     .weapon-slot.active {
       opacity: 1;
       color: #00ffe0;
       border-color: rgba(0,255,224,0.4);
-      background: rgba(0,255,224,0.07);
-      box-shadow: 0 0 12px rgba(0,255,224,0.1);
+      background: rgba(0,255,224,0.09);
+      box-shadow: 0 0 18px rgba(0,255,224,0.18), inset 0 -2px 0 rgba(0,255,224,.55);
     }
     .weapon-slot .slot-key {
       font-family: 'Orbitron', monospace;
       font-size: 9px;
       opacity: 0.5;
-      min-width: 14px;
+      min-width: 18px;
     }
     .weapon-slot.active .slot-key { opacity: 1; }
     .weapon-icon {
-      font-size: 16px;
+      font-size: 15px;
       line-height: 1;
+      color: #ffcc00;
     }
-    .slot-name { font-size: 10px; letter-spacing: 2px; }
-    .slot-count { font-size: 9px; opacity: 0.6; }
+    .slot-name { font-size: 10px; letter-spacing: 2px; white-space: nowrap; }
+    .slot-count { font-size: 10px; opacity: 0.75; color: #ffffff; }
 
     #match-panel {
       position: static;
@@ -671,8 +678,8 @@
   </div>
   <p style="font-size:11px;opacity:.35;letter-spacing:3px;margin-top:24px">
     WASD 이동 &nbsp;|&nbsp; SPACE 점프 &nbsp;|&nbsp; SHIFT 대시<br/><br/>
-    우클릭 조준 &nbsp;|&nbsp; R 기지 재장전 &nbsp;|&nbsp; M 사격모드 &nbsp;|&nbsp; 휠 줌<br/><br/>
-    1 M4A1 &nbsp;|&nbsp; 2 저격총 &nbsp;|&nbsp; 3 붕대 &nbsp;|&nbsp; 4 폭탄 &nbsp;|&nbsp; TAB 스코어보드
+    우클릭 조준 &nbsp;|&nbsp; R 기지 재장전 &nbsp;|&nbsp; TAB 스코어보드<br/><br/>
+    1/2/5 로드아웃 무기 &nbsp;|&nbsp; 3 붕대 &nbsp;|&nbsp; 4 폭탄
   </p>
 </div>
 

@@ -9,10 +9,10 @@ export class CameraController {
     this.yaw   = -90.0;
     this.pitch =   0.0;
 
-    this.cameraDistance = 4.0;
+    this.cameraDistance = 0.0;
     this.minDist = 0.0;
-    this.maxDist = 8.0;
-    this.isFirstPerson = false;
+    this.maxDist = 0.0;
+    this.isFirstPerson = true;
 
     this.slideDrop = 0;
 
@@ -29,8 +29,8 @@ export class CameraController {
   }
 
   onMouseMove(dx, dy, isAiming, scopeProgress = 0) {
-    const scopeSens = scopeProgress > 0.5 ? 0.15 : 1.0;
-    const sens = 0.08 * (isAiming ? 0.5 : 1.0) * scopeSens;
+    const scopeSens = scopeProgress > 0.5 ? 0.22 : 1.0;
+    const sens = 0.055 * (isAiming ? 0.62 : 1.0) * scopeSens;
     this.yaw   += dx * sens;
     this.pitch -= dy * sens;
     this.pitch  = Math.max(-89, Math.min(89, this.pitch));
@@ -47,9 +47,8 @@ export class CameraController {
   }
 
   onWheel(delta) {
-    this.cameraDistance = Math.max(this.minDist,
-      Math.min(this.maxDist, this.cameraDistance - delta * 0.5));
-    this.isFirstPerson = this.cameraDistance <= 0.5;
+    this.cameraDistance = 0;
+    this.isFirstPerson = true;
   }
 
   /**
@@ -92,6 +91,7 @@ export class CameraController {
 
     // ── 카메라 위치 / 타겟 ──
     const dist = this.cameraDistance;
+    this.isFirstPerson = true;
     if (this.isFirstPerson) {
       this._camPos.copy(this._headPos);
       this._target.copy(this._headPos).addScaledVector(this._front, 1);

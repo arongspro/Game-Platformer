@@ -300,9 +300,9 @@ function addKillfeed(text, isKill = false) {
 // ── 부위별 히트박스 레이캐스트 ──
 // 기본 데미지 (M4A1 기준)
 const HITBOXES = [
-  { name:'HEAD', offsetY:1.95, halfH:0.27, radius:0.28, rifle:20, sniper:100 },
-  { name:'BODY', offsetY:1.25, halfH:0.35, radius:0.38, rifle:10, sniper:40 },
-  { name:'LEGS', offsetY:0.45, halfH:0.45, radius:0.28, rifle: 5, sniper:25 },
+  { name:'HEAD', offsetY:1.95, halfH:0.31, radius:0.34, rifle:20, sniper:100 },
+  { name:'BODY', offsetY:1.25, halfH:0.42, radius:0.47, rifle:10, sniper:40 },
+  { name:'LEGS', offsetY:0.45, halfH:0.52, radius:0.35, rifle: 5, sniper:25 },
 ];
 
 // 무기별 데미지 테이블

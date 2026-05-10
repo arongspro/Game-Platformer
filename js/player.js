@@ -33,6 +33,8 @@ export class Player {
     this.targetRoll  = 0;
     this.currentRoll = 0;
     this.recoilRoll  = 0;
+    this.recoilYaw   = 0;
+    this.recoilPitch = 0;
 
     // 무기
     this.ammo          = 30;
@@ -455,6 +457,8 @@ export class Player {
     state.cooldown = weapon.fireRate;
     this.recoilOffset = weapon.recoil;
     this.recoilRoll = (Math.random() * 6 - 3) * (weapon.scope ? 1.8 : 1);
+    this.recoilYaw += (Math.random() - 0.5) * weapon.recoil * 0.75;
+    this.recoilPitch += weapon.recoil * 0.55;
     if (checkHitFn) checkHitFn(weapon.id);
     if (this.onShoot) this.onShoot(weapon);
     if (this.onHudUpdate) this.onHudUpdate();
@@ -530,6 +534,12 @@ export class Player {
 
     // 반동 감쇠
     this.recoilOffset = Math.max(0, this.recoilOffset - 0.05);
+    if (camCtrl) {
+      camCtrl.yaw += this.recoilYaw;
+      camCtrl.pitch = Math.max(-89, Math.min(89, camCtrl.pitch + this.recoilPitch));
+      this.recoilYaw *= 0.58;
+      this.recoilPitch *= 0.52;
+    }
 
     // 이동 방향
     const yawRad = THREE.MathUtils.degToRad(camCtrl.yaw);
