@@ -67,6 +67,25 @@ const roomJoinBtn       = document.getElementById('room-join-btn');
 const mapSelectEl       = document.getElementById('map-select');
 const loadoutGridEl     = document.getElementById('loadout-grid');
 const loadoutSlotsEl    = document.getElementById('loadout-slots');
+const fpsDisplayEl      = document.getElementById('fps-display');
+const pingDisplayEl     = document.getElementById('ping-display');
+
+// FPS / Ping 측정
+let _fpsFrames = 0, _fpsAccum = 0, _fpsValue = 0;
+let _pingValue = 0;
+function _measurePing() {
+  const start = Date.now();
+  // Firebase 핑: 작은 타임스탬프 읽기로 RTT 측정
+  import('firebase/database').then(({ getDatabase, ref, get }) => {
+    const db = getDatabase();
+    get(ref(db, '.info/serverTimeOffset')).then(() => {
+      _pingValue = Date.now() - start;
+    }).catch(() => {});
+  }).catch(() => {});
+}
+setInterval(_measurePing, 3000);
+_measurePing();
+
 
 const BASE_CENTER = new THREE.Vector3(0, 1, 5);
 const BASE_RADIUS = 17;
@@ -651,8 +670,25 @@ function loop() {
   requestAnimationFrame(loop);
   const dt = Math.min(clock.getDelta(), 0.05);
 
+  // FPS 측정 (0.5초마다 갱신)
+  _fpsFrames++;
+  _fpsAccum += dt;
+  if (_fpsAccum >= 0.5) {
+    _fpsValue = Math.round(_fpsFrames / _fpsAccum);
+    _fpsFrames = 0;
+    _fpsAccum  = 0;
+    if (fpsDisplayEl) {
+      fpsDisplayEl.textContent = `${_fpsValue} FPS`;
+      fpsDisplayEl.style.color = _fpsValue >= 50 ? '#00ffe0' : _fpsValue >= 30 ? '#ffcc00' : '#ff4444';
+    }
+    if (pingDisplayEl) {
+      pingDisplayEl.textContent = `${_pingValue} ms`;
+      pingDisplayEl.style.color = _pingValue < 80 ? '#00ffe0' : _pingValue < 150 ? '#ffcc00' : '#ff4444';
+    }
+  }
+
   if (isLocked()) {
-    player.update(camCtrl, checkHit);
+    player.update(camCtrl, checkHit, dt);
     camCtrl.update(player.pos, player.isSliding, player.bobAmp,
                    player.moveTime, player.isJumping, player.currentRoll);
 
@@ -683,7 +719,10 @@ function loop() {
     }
 
     renderer.updateParticles(dt);
-    network.sendUpdate(player.getSnapshot(camCtrl));
+  }
+
+  // 포인터 락 여부와 무관하게 항상 위치 전송 (상대방에게 보이기 위함)
+  network.sendUpdate(player.getSnapshot(camCtrl));
 
     // 보급상자: 가까이 있고 탄약이 부족할 때만 라벨 표시, 상자 회전
     const isFull = player.ammo === player.maxAmmo &&
