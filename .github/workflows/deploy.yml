@@ -1,9 +1,7 @@
 name: Deploy to GitHub Pages
-
 on:
   push:
-    branches: [ main ] # main 브랜치에 푸시될 때 실행
-
+    branches: [ main ]
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -11,40 +9,28 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Inject Secrets and Verify
+      - name: Inject Secrets
         run: |
-          # 1. 대상 파일 설정
-          TARGET="js/network.js"
+          echo "== 현재 폴더 구조 =="
+          find . -name "network.js"
           
-          # 2. 파일 존재 확인
-          if [ ! -f "$TARGET" ]; then
-            echo "❌ 에러: $TARGET 파일을 찾을 수 없습니다. 폴더 구조를 확인하세요."
-            ls -R # 현재 폴더 구조를 로그에 출력하여 디버깅 지원
-            exit 1
-          fi
-
-          echo "✅ 파일을 찾았습니다. 치환을 시작합니다."
-
-          # 3. 데이터 주입 (sed 명령어 실행)
-          # 구분자를 | 로 사용하여 URL 내의 / 문자와 충돌을 방지합니다.
-          sed -i "s|__VITE_FB_API_KEY__|${{ secrets.VITE_FB_API_KEY }}|g" $TARGET
-          sed -i "s|__VITE_FB_AUTH_DOMAIN__|${{ secrets.VITE_FB_AUTH_DOMAIN }}|g" $TARGET
-          sed -i "s|__VITE_FB_DATABASE_URL__|${{ secrets.VITE_FB_DATABASE_URL }}|g" $TARGET
-          sed -i "s|__VITE_FB_PROJECT_ID__|${{ secrets.VITE_FB_PROJECT_ID }}|g" $TARGET
-          sed -i "s|__VITE_FB_STORAGE_BUCKET__|${{ secrets.VITE_FB_STORAGE_BUCKET }}|g" $TARGET
-          sed -i "s|__VITE_FB_MESSAGING_SENDER_ID__|${{ secrets.VITE_FB_MESSAGING_SENDER_ID }}|g" $TARGET
-          sed -i "s|__VITE_FB_APP_ID__|${{ secrets.VITE_FB_APP_ID }}|g" $TARGET
-          sed -i "s|__VITE_FB_MEASUREMENT_ID__|${{ secrets.VITE_FB_MEASUREMENT_ID }}|g" $TARGET
-
-          echo "✅ 치환 명령 완료."
-
-          # 4. 결과 검증 (보안을 위해 실제 값은 ***로 가려지지만, placeholder가 사라졌는지는 확인 가능)
-          echo "--- 수정된 파일 상단 내용 확인 ---"
-          head -n 20 $TARGET
-          echo "--------------------------------"
+          TARGET=$(find . -name "network.js" | head -1)
+          echo "대상 파일: $TARGET"
+          
+          sed -i "s|__VITE_FB_API_KEY__|${{ secrets.VITE_FB_API_KEY }}|g" "$TARGET"
+          sed -i "s|__VITE_FB_AUTH_DOMAIN__|${{ secrets.VITE_FB_AUTH_DOMAIN }}|g" "$TARGET"
+          sed -i "s|__VITE_FB_DATABASE_URL__|${{ secrets.VITE_FB_DATABASE_URL }}|g" "$TARGET"
+          sed -i "s|__VITE_FB_PROJECT_ID__|${{ secrets.VITE_FB_PROJECT_ID }}|g" "$TARGET"
+          sed -i "s|__VITE_FB_STORAGE_BUCKET__|${{ secrets.VITE_FB_STORAGE_BUCKET }}|g" "$TARGET"
+          sed -i "s|__VITE_FB_MESSAGING_SENDER_ID__|${{ secrets.VITE_FB_MESSAGING_SENDER_ID }}|g" "$TARGET"
+          sed -i "s|__VITE_FB_APP_ID__|${{ secrets.VITE_FB_APP_ID }}|g" "$TARGET"
+          sed -i "s|__VITE_FB_MEASUREMENT_ID__|${{ secrets.VITE_FB_MEASUREMENT_ID }}|g" "$TARGET"
+          
+          echo "== 치환 결과 확인 =="
+          grep "databaseURL\|apiKey" "$TARGET"
 
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          folder: . # 빌드 도구가 없으므로 현재 폴더 전체를 배포
-          branch: gh-pages # 배포용 브랜치
+          folder: .
+          branch: gh-pages
