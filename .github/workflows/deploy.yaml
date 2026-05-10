@@ -13,29 +13,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Inject Secrets
-        run: |
-          TARGET=$(find . -name "network.js" | head -1)
-          echo "대상 파일: $TARGET"
-
-          sed -i "s|__VITE_FB_API_KEY__|${{ secrets.VITE_FB_API_KEY }}|g" "$TARGET"
-          sed -i "s|__VITE_FB_AUTH_DOMAIN__|${{ secrets.VITE_FB_AUTH_DOMAIN }}|g" "$TARGET"
-          sed -i "s|__VITE_FB_DATABASE_URL__|${{ secrets.VITE_FB_DATABASE_URL }}|g" "$TARGET"
-          sed -i "s|__VITE_FB_PROJECT_ID__|${{ secrets.VITE_FB_PROJECT_ID }}|g" "$TARGET"
-          sed -i "s|__VITE_FB_STORAGE_BUCKET__|${{ secrets.VITE_FB_STORAGE_BUCKET }}|g" "$TARGET"
-          sed -i "s|__VITE_FB_MESSAGING_SENDER_ID__|${{ secrets.VITE_FB_MESSAGING_SENDER_ID }}|g" "$TARGET"
-          sed -i "s|__VITE_FB_APP_ID__|${{ secrets.VITE_FB_APP_ID }}|g" "$TARGET"
-          sed -i "s|__VITE_FB_MEASUREMENT_ID__|${{ secrets.VITE_FB_MEASUREMENT_ID }}|g" "$TARGET"
-
-          echo "== 치환 결과 확인 =="
-          grep "databaseURL\|apiKey" "$TARGET"
-
-          if grep -q "__VITE_FB_" "$TARGET"; then
-            echo "❌ 치환되지 않은 플레이스홀더가 남아있습니다. Repository Secrets를 확인하세요."
-            exit 1
-          fi
-          echo "✅ 모든 환경 변수 주입 완료"
-
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
