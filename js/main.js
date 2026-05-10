@@ -804,7 +804,7 @@ function loop() {
   }
 
   renderer.render(renderer.camera);
-}
+
 
 updateHud();
 playerCountEl.textContent = 'PLAYERS: 1';
