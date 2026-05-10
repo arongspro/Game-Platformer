@@ -67,9 +67,11 @@ export class Player {
     this.sniperMaxTotal   = 20;
     this.sniperReloading  = false;
     this.sniperReloadTimer = 0;
-    this.sniperReloadDur  = 120;   // 2초
+    this.sniperReloadDur  = 120;
     this.isScopedIn       = false;
-    this.scopeProgress    = 0;     // 0→1 (스코프 줌 진행도)
+    this.scopeProgress    = 0;
+    this.sniperFireCd     = 0;     // 발사 후 쿨타임
+    this.sniperFireRate   = 15;    // 15프레임 쿨타임
     this._slot2Held       = false;
 
     // ── 권총 ──
@@ -488,6 +490,13 @@ export class Player {
     // ── 슬롯별 좌클릭 동작 ──
     this.fireCooldown = Math.max(0, this.fireCooldown - 1);
     this.pistolFireCd = Math.max(0, this.pistolFireCd - 1);
+    this.sniperFireCd = Math.max(0, this.sniperFireCd - 1);
+
+    // 저격총 우클릭 시 자동 1인칭 전환
+    if (this.weaponSlot === 2 && mouse.right && camCtrl && !camCtrl.isFirstPerson) {
+      camCtrl.cameraDistance = 0;
+      camCtrl.isFirstPerson  = true;
+    }
 
     if (this.weaponSlot === 1) {
       // M4A1: AUTO/SEMI
@@ -510,8 +519,9 @@ export class Player {
       this.scopeProgress = Math.max(0, Math.min(1, this.scopeProgress));
 
       if (mouse.left && !this.mouseLeftHeld) {
-        if (!this.sniperReloading && this.sniperAmmo > 0) {
+        if (!this.sniperReloading && this.sniperAmmo > 0 && this.sniperFireCd === 0) {
           this.sniperAmmo--;
+          this.sniperFireCd = this.sniperFireRate;
           this.recoilOffset = 0.6;
           this.recoilRoll   = (Math.random() * 10 - 5);
           if (checkHitFn) checkHitFn('sniper');
