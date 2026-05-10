@@ -21,6 +21,8 @@ const adsVignette   = document.getElementById('ads-vignette');
 const hitmarker     = document.getElementById('hitmarker');
 const reloadBar     = document.getElementById('reload-bar');
 const reloadFill    = document.getElementById('reload-fill');
+const bandageBar    = document.getElementById('bandage-bar');
+const bandageFill   = document.getElementById('bandage-fill');
 const healthFill    = document.getElementById('health-fill');
 const healthNum     = document.getElementById('health-num');
 const ammoCurrentEl = document.getElementById('ammo-current');
@@ -35,7 +37,9 @@ const grenadeChargeEl   = document.getElementById('grenade-charge');
 const grenadeChargeFill = document.getElementById('grenade-charge-fill');
 const slot1El           = document.getElementById('slot-1');
 const slot4El           = document.getElementById('slot-4');
+const slot3El           = document.getElementById('slot-3');
 const grenadeCountUI    = document.getElementById('grenade-count-ui');
+const bandageCountUI    = document.getElementById('bandage-count-ui');
 
 // 닉네임 표시
 myNickEl.textContent = userInfo.nickname;
@@ -167,6 +171,7 @@ function updateHud() {
     ammoMode.textContent      = player.isChargingGrenade ? `[CHARGE ${charge}%]` : '[GRENADE]';
   }
   reloadBar.classList.toggle('visible', player.isReloading);
+  bandageBar.classList.toggle('visible', player.isBandaging);
 
   const invincible = network.isInvincible();
   if (invincible) {
@@ -303,8 +308,8 @@ const CRATE_INTERACT_DIST = 3.5;
 // 3) 중간 플랫폼(y=13.5): 큐브(0,15,99) 뒤 → z=102
 // 4) 최종 플랫폼(y=24):  큰 큐브(0,25,152) 뒤 → z=156
 const CRATE_DEFS = [
-  { pos: new THREE.Vector3(  0,  2.2,  12) },   // 스폰: 뒤쪽 기둥 앞
-  { pos: new THREE.Vector3(-13,  7.6,  44) },   // 계단 플랫폼: 왼쪽 탑 뒤
+  { pos: new THREE.Vector3(  0,  2.2,   0) },   // 스폰: 수정 전 원래 위치
+  { pos: new THREE.Vector3(  0,  6.6,  35) },   // 계단 플랫폼 중앙
   { pos: new THREE.Vector3(  0, 14.6, 102) },   // 중간 플랫폼: 큐브 뒤
   { pos: new THREE.Vector3(  0, 24.6, 156) },   // 최종 플랫폼: 큰 큐브 뒤
 ];
@@ -373,7 +378,8 @@ window.addEventListener('keydown', e => {
   // 탄약·수류탄 모두 가득 차면 무시
   const isFull = player.ammo === player.maxAmmo &&
                  player.totalAmmo === player.maxTotalAmmo &&
-                 player.grenadeCount === player.maxGrenades;
+                 player.grenadeCount === player.maxGrenades &&
+                 player.bandageCount === player.maxBandage;
   if (isFull) return;
 
   for (const crate of crates) {
@@ -427,7 +433,10 @@ player.grenadeSystem.onExplode = (pos, radius, maxDamage) => {
   updateHud();
 };
 
-network.onPlayersUpdate = (others) => {
+player.onBandageUsed = () => {
+  addKillfeed('🩹 붕대 사용 완료! +30 HP');
+  updateHud();
+};
   for (const pid of Object.keys(remoteMeshes)) {
     if (!others[pid]) renderer.removeRemotePlayer(pid, remoteMeshes);
   }
@@ -470,6 +479,12 @@ function loop() {
     if (player.isReloading) {
       reloadFill.style.width = ((1 - player.reloadTimer/player.reloadDuration)*100) + '%';
     }
+    if (player.isBandaging) {
+      bandageFill.style.width = ((1 - player.bandageTimer/player.bandageDuration)*100) + '%';
+      bandageBar.classList.add('visible');
+    } else {
+      bandageBar.classList.remove('visible');
+    }
 
     renderer.updateParticles(dt);
     network.sendUpdate(player.getSnapshot(camCtrl));
@@ -477,7 +492,8 @@ function loop() {
     // 보급상자: 가까이 있고 탄약이 부족할 때만 라벨 표시, 상자 회전
     const isFull = player.ammo === player.maxAmmo &&
                    player.totalAmmo === player.maxTotalAmmo &&
-                   player.grenadeCount === player.maxGrenades;
+                   player.grenadeCount === player.maxGrenades &&
+                   player.bandageCount === player.maxBandage;
     for (const crate of crates) {
       const near = player.pos.distanceTo(crate.pos) <= CRATE_INTERACT_DIST;
       crate.label.visible = near && !isFull;
@@ -493,10 +509,12 @@ function loop() {
       grenadeChargeEl.classList.remove('visible');
     }
     // 슬롯 하이라이트
-    if (slot1El && slot4El) {
+    if (slot1El && slot4El && slot3El) {
       slot1El.classList.toggle('active', player.weaponSlot === 1);
       slot4El.classList.toggle('active', player.weaponSlot === 4);
+      slot3El.classList.toggle('active', player.weaponSlot === 3);
       if (grenadeCountUI) grenadeCountUI.textContent = `×${player.grenadeCount}`;
+      if (bandageCountUI) bandageCountUI.textContent = `×${player.bandageCount}`;
     }
   }
 
