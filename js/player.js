@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { GrenadeSystem } from './grenade.js';
+import { WEAPON_CATALOG, normalizeLoadout, getWeaponById } from './weapons.js';
 
 export class Player {
   constructor(boxes, renderer) {
@@ -12,10 +13,12 @@ export class Player {
     this.playerRadius = 0.4;
     this.playerHeight = 1.8;
 
-    this.baseSpeed = 0.08;
-    this.gravity   = -0.015;
-    this.jumpStr   = 0.25;
+    this.baseSpeed = 0.105;
+    this.gravity   = -0.017;
+    this.jumpStr   = 0.285;
     this.isJumping = false;
+    this.speedBoost = 0;
+    this.padCooldown = 0;
 
     // 슬라이드/대시
     this.isSliding       = false;
@@ -45,6 +48,12 @@ export class Player {
     this.fireMode      = 'AUTO';
     this.fireCooldown  = 0;
     this.fireRate      = 6;
+    this.weaponCatalog = WEAPON_CATALOG;
+    this.loadoutIds = normalizeLoadout(JSON.parse(localStorage.getItem('vp_loadout') || 'null'));
+    this.weaponStates = {};
+    for (const weapon of this.weaponCatalog) {
+      this.weaponStates[weapon.id] = { ammo: weapon.maxAmmo, reserve: weapon.reserve, cooldown: 0, reloading: false, reloadTimer: 0 };
+    }
     this.weaponProfiles = {
       rifle:  { slot: 1, name: 'M4A1',    ammo: 30, reserve: 120, maxAmmo: 30, maxReserve: 120, reload: 60, fireRate: 6, recoil: 0.3 },
       sniper: { slot: 2, name: 'SNIPER',  ammo: 5,  reserve: 25,  maxAmmo: 5,  maxReserve: 25,  reload: 95, fireRate: 44, recoil: 0.85 },
@@ -93,6 +102,7 @@ export class Player {
     this.pistolFireCd     = 0;
     this.pistolFireRate   = 15;    // 반자동 쿨다운
     this._slot5Held       = false;
+    this._spaceHeld       = false;
 
     // 붕대
     this.bandageCount    = 0;      // 현재 소지 (최대 1)
@@ -402,6 +412,22 @@ export class Player {
     return false;
   }
 
+  setLoadout(ids) {
+    this.loadoutIds = normalizeLoadout(ids);
+    localStorage.setItem('vp_loadout', JSON.stringify(this.loadoutIds));
+    if (this.onHudUpdate) this.onHudUpdate();
+  }
+
+  getLoadoutWeapon(slot = this.weaponSlot) {
+    const idx = slot === 2 ? 1 : slot === 5 ? 2 : 0;
+    return getWeaponById(this.loadoutIds[idx]);
+  }
+
+  getLoadoutState(slot = this.weaponSlot) {
+    const weapon = this.getLoadoutWeapon(slot);
+    return this.weaponStates[weapon.id];
+  }
+
   // ─────────────────────────────────────────
   // 사격
   // ─────────────────────────────────────────
@@ -418,6 +444,24 @@ export class Player {
     if (this.onHudUpdate) this.onHudUpdate();
   }
 
+  shootLoadoutWeapon(checkHitFn) {
+    const weapon = this.getLoadoutWeapon();
+    const state = this.weaponStates[weapon.id];
+    if (!state || state.ammo <= 0 || state.reloading || state.cooldown > 0) return;
+    const shouldFire = weapon.auto ? this.mouse.left : !this.mouseLeftHeld;
+    if (!shouldFire) return;
+
+    state.ammo--;
+    state.cooldown = weapon.fireRate;
+    this.recoilOffset = weapon.recoil;
+    this.recoilRoll = (Math.random() * 6 - 3) * (weapon.scope ? 1.8 : 1);
+    if (checkHitFn) checkHitFn(weapon.id);
+    if (this.onShoot) this.onShoot(weapon);
+    if (this.onHudUpdate) this.onHudUpdate();
+    if (!weapon.auto) this.mouseLeftHeld = true;
+    if (state.ammo === 0 && state.reserve > 0) this.startReload();
+  }
+
   // 보급상자에서 리필
   refillFromCrate() {
     this.ammo         = this.maxAmmo;
@@ -430,6 +474,13 @@ export class Player {
     this.weaponAmmo.rifle.reserve  = this.weaponProfiles.rifle.maxReserve;
     this.weaponAmmo.sniper.ammo    = this.weaponProfiles.sniper.maxAmmo;
     this.weaponAmmo.sniper.reserve = this.weaponProfiles.sniper.maxReserve;
+    for (const weapon of this.weaponCatalog) {
+      const state = this.weaponStates[weapon.id];
+      state.ammo = weapon.maxAmmo;
+      state.reserve = weapon.reserve;
+      state.reloading = false;
+      state.reloadTimer = 0;
+    }
     this._syncWeaponStats();
     this.grenadeCount = this.maxGrenades;
     this.bandageCount = this.maxBandage;
@@ -441,6 +492,16 @@ export class Player {
 
   startReload() {
     if (!this.canUseBaseAction?.()) return;
+    if (this.weaponSlot === 1 || this.weaponSlot === 2 || this.weaponSlot === 5) {
+      const weapon = this.getLoadoutWeapon();
+      const state = this.weaponStates[weapon.id];
+      if (state.ammo < weapon.maxAmmo && !state.reloading && state.reserve > 0) {
+        state.reloading = true;
+        state.reloadTimer = weapon.reload;
+        if (this.onHudUpdate) this.onHudUpdate();
+      }
+      return;
+    }
     if (this.weaponSlot === 1 && this.ammo < this.maxAmmo && !this.isReloading && this.totalAmmo > 0) {
       this.isReloading = true;
       this.reloadTimer = this.reloadDuration;
@@ -485,7 +546,8 @@ export class Player {
     // 무기 슬롯 전환
     if (keys['Digit1'] && !this._slot1Held && !this.isReloading) { this.weaponSlot = 1; this._slot1Held = true; if (this.onHudUpdate) this.onHudUpdate(); }
     if (!keys['Digit1']) this._slot1Held = false;
-    const canSwitchWeapon = !this.isReloading && !this.sniperReloading && !this.pistolReloading;
+    const canSwitchWeapon = !this.isReloading && !this.sniperReloading && !this.pistolReloading &&
+      !Object.values(this.weaponStates).some(s => s.reloading);
     if (keys['Digit2'] && !this._slot2Held && canSwitchWeapon) { this.weaponSlot = 2; this._slot2Held = true; if (this.onHudUpdate) this.onHudUpdate(); }
     if (!keys['Digit2']) this._slot2Held = false;
     if (keys['Digit5'] && !this._slot5Held && canSwitchWeapon) { this.weaponSlot = 5; this._slot5Held = true; if (this.onHudUpdate) this.onHudUpdate(); }
@@ -510,32 +572,28 @@ export class Player {
     this.fireCooldown = Math.max(0, this.fireCooldown - 1);
     this.pistolFireCd = Math.max(0, this.pistolFireCd - 1);
     this.sniperFireCd = Math.max(0, this.sniperFireCd - 1);
+    for (const state of Object.values(this.weaponStates)) {
+      state.cooldown = Math.max(0, state.cooldown - 1);
+    }
 
     // 저격총 우클릭 시 자동 1인칭 전환
-    if (this.weaponSlot === 2 && mouse.right && camCtrl && !camCtrl.isFirstPerson) {
+    const equipped = this.getLoadoutWeapon();
+    if (equipped.scope && mouse.right && camCtrl && !camCtrl.isFirstPerson) {
       camCtrl.cameraDistance = 0;
       camCtrl.isFirstPerson  = true;
     }
 
-    if (this.weaponSlot === 1) {
-      // M4A1: AUTO/SEMI
+    if (this.weaponSlot === 1 || this.weaponSlot === 2 || this.weaponSlot === 5) {
+      this.isScopedIn = !!equipped.scope && mouse.right;
+      this.scopeProgress += (this.isScopedIn ? 1 : -1) * 0.12;
+      this.scopeProgress = Math.max(0, Math.min(1, this.scopeProgress));
       if (mouse.left) {
-        if (this.weaponSlot === 1 && this.fireMode === 'AUTO') {
-          if (this.fireCooldown === 0) { this.shoot(checkHitFn); this.fireCooldown = this.fireRate; }
-        } else {
-          if (!this.mouseLeftHeld && this.fireCooldown === 0) {
-            this.shoot(checkHitFn);
-            this.fireCooldown = this.fireRate;
-            this.mouseLeftHeld = true;
-          }
-        }
+        this.shootLoadoutWeapon(checkHitFn);
       } else { this.mouseLeftHeld = false; }
-      this.isScopedIn = false; this.scopeProgress = 0;
       this.isChargingGrenade = false;
       this.grenadeCharge = 0;
       this.isBandaging = false;
-
-    } else if (this.weaponSlot === 2) {
+    } else if (false && this.weaponSlot === 2) {
       // ── 저격총: SEMI, 우클릭 스코프 ──
       this.isScopedIn = mouse.right && !this.sniperReloading;
       this.scopeProgress += (this.isScopedIn ? 1 : -1) * 0.12;
@@ -565,7 +623,7 @@ export class Player {
       this.grenadeCharge = 0;
       this.isBandaging = false;
 
-    } else if (this.weaponSlot === 5) {
+    } else if (false && this.weaponSlot === 5) {
       // ── 권총: SEMI ──
       this.isScopedIn = false; this.scopeProgress = 0;
       if (mouse.left && !this.mouseLeftHeld) {
@@ -633,7 +691,7 @@ export class Player {
 
     // 워킹 밥
     if (isMoving && !this.isJumping && !this.isSliding) {
-      this.moveTime += this.baseSpeed * 1.5;
+      this.moveTime += this.baseSpeed * 2.25;
       this.bobAmp   += (1 - this.bobAmp) * 0.1;
     } else {
       this.bobAmp += (0 - this.bobAmp) * 0.1;
@@ -648,18 +706,20 @@ export class Player {
     // 슬라이드 시작
     if (keys['ShiftLeft'] && !this.isSliding && !this.isJumping && isMoving && this.dashCooldown <= 0) {
       this.isSliding  = true;
-      this.slideSpeed = this.baseSpeed * 5.5;   // 슬라이드 속도 (baseSpeed * 5.5)
+      this.slideSpeed = this.baseSpeed * 6.8;
       this.slideDir.copy(moveDir);
       this.dashCooldown = this.dashCooldownMax;
       if (this.onHudUpdate) this.onHudUpdate();
     }
 
     // 점프 (슬라이드 중에도 가능 → 슬라이드 취소 후 점프)
+    const spacePressed = keys['Space'] && !this._spaceHeld;
     if (keys['Space'] && !this.isJumping) {
       this.isSliding = false;   // 슬라이드 즉시 취소
       this.yVel      = this.jumpStr;
       this.isJumping = true;
     }
+    this._spaceHeld = !!keys['Space'];
 
     let actualMove = new THREE.Vector3();
     if (this.isSliding) {
@@ -667,7 +727,7 @@ export class Player {
       this.slideSpeed -= 0.045;   // 빠르게 감속 (짧게)
       if (this.slideSpeed <= this.baseSpeed) this.isSliding = false;
     } else {
-      if (isMoving) actualMove.copy(moveDir).multiplyScalar(this.baseSpeed);
+      if (isMoving) actualMove.copy(moveDir).multiplyScalar(this.baseSpeed + this.speedBoost);
     }
 
     // 충돌 이동
@@ -680,6 +740,8 @@ export class Player {
 
     // 중력
     this.yVel += this.gravity;
+    if (this.speedBoost > 0) this.speedBoost *= 0.94;
+    this.padCooldown = Math.max(0, this.padCooldown - 1);
     const tryY = this.pos.clone(); tryY.y += this.yVel;
     if (!this.checkCollision(tryY)) {
       this.pos.y = tryY.y;
@@ -687,6 +749,8 @@ export class Player {
       if (this.yVel < 0) this.isJumping = false;
       this.yVel = 0;
     }
+
+    this._handleMapBoosters(spacePressed, moveDir);
 
     // 리로드
     if (this.isReloading) {
@@ -728,6 +792,20 @@ export class Player {
       }
     }
 
+    for (const [weaponId, state] of Object.entries(this.weaponStates)) {
+      if (!state.reloading) continue;
+      const weapon = getWeaponById(weaponId);
+      state.reloadTimer--;
+      if (state.reloadTimer <= 0) {
+        state.reloading = false;
+        const needed = weapon.maxAmmo - state.ammo;
+        const fill = Math.min(needed, state.reserve);
+        state.ammo += fill;
+        state.reserve -= fill;
+        if (this.onHudUpdate) this.onHudUpdate();
+      }
+    }
+
     // 붕대 사용 타이머
     if (this.isBandaging) {
       this.bandageTimer--;
@@ -752,6 +830,11 @@ export class Player {
       this.weaponAmmo.rifle.reserve  = this.weaponProfiles.rifle.maxReserve;
       this.weaponAmmo.sniper.ammo    = this.weaponProfiles.sniper.maxAmmo;
       this.weaponAmmo.sniper.reserve = this.weaponProfiles.sniper.maxReserve;
+      for (const weapon of this.weaponCatalog) {
+        this.weaponStates[weapon.id].ammo = weapon.maxAmmo;
+        this.weaponStates[weapon.id].reserve = weapon.reserve;
+        this.weaponStates[weapon.id].reloading = false;
+      }
       this._syncWeaponStats();
       this.grenadeCount = this.maxGrenades;
       this.bandageCount = 0;          // 붕대는 죽으면 소멸
@@ -767,6 +850,36 @@ export class Player {
     this._updateLocalBody(camCtrl);
     this._updateFirstPersonWeapon(camCtrl);
     if (this.grenadeSystem) this.grenadeSystem.update();
+  }
+
+  _handleMapBoosters(spacePressed, moveDir) {
+    if (!this.renderer) return;
+    const pad = this.renderer.getJumpPadAt?.(this.pos);
+    if (pad && this.yVel <= 0.08 && this.padCooldown === 0) {
+      this.yVel = Math.max(this.yVel, pad.power);
+      this.isJumping = true;
+      this.speedBoost = Math.max(this.speedBoost, pad.speed || 0);
+      this.renderer.spawnPadBurst?.(this.pos, pad.color);
+      this.padCooldown = 20;
+    }
+
+    const point = this.renderer.getAirPointAt?.(this.pos);
+    if (!point) return;
+    if (point.type === 'drop') {
+      this.yVel = Math.min(this.yVel, -0.72);
+      if (this.padCooldown === 0) {
+        this.renderer.spawnPadBurst?.(this.pos, point.color);
+        this.padCooldown = 12;
+      }
+      return;
+    }
+    if (spacePressed && this.padCooldown === 0) {
+      this.yVel = Math.max(this.yVel, point.power);
+      this.speedBoost = Math.max(this.speedBoost, point.speed || 0.015);
+      this.isJumping = true;
+      this.renderer.spawnPadBurst?.(this.pos, point.color);
+      this.padCooldown = 18;
+    }
   }
 
   // ─────────────────────────────────────────
@@ -805,13 +918,14 @@ export class Player {
   // ─────────────────────────────────────────
   _updateFirstPersonWeapon(camCtrl) {
     const fp = camCtrl.isFirstPerson;
+    const equipped = this.getLoadoutWeapon();
 
     // 슬롯에 따라 표시/숨김
-    this._fpWeaponGroup.visible  = fp && (this.weaponSlot === 1);
+    this._fpWeaponGroup.visible  = fp && !equipped.scope && (this.weaponSlot === 1 || this.weaponSlot === 2);
     this._fpGrenadeGroup.visible = fp && this.weaponSlot === 4;
     // 저격총/권총은 별도 그룹 (없으면 기본 총 그룹 재활용)
-    if (this._fpSniperGroup) this._fpSniperGroup.visible = fp && this.weaponSlot === 2;
-    if (this._fpPistolGroup) this._fpPistolGroup.visible = fp && this.weaponSlot === 5;
+    if (this._fpSniperGroup) this._fpSniperGroup.visible = fp && equipped.scope;
+    if (this._fpPistolGroup) this._fpPistolGroup.visible = fp && this.weaponSlot === 5 && !equipped.scope;
 
     if (!fp) return;
 
@@ -844,7 +958,7 @@ export class Player {
     const bobY = Math.sin(this.moveTime * 10) * 0.006 * this.bobAmp * bobFactor;
 
     // ── 저격총 슬롯 ──
-    if (this.weaponSlot === 2) {
+    if (equipped.scope) {
       const scope = this.scopeProgress;
       // 스코프 시 중앙으로, 손 떨림 최소화
       const sx = 0.22 + (0.0 - 0.22) * scope;
@@ -910,7 +1024,7 @@ export class Player {
   }
 
   getWeaponKey() {
-    return this.weaponSlot === 2 ? 'sniper' : 'rifle';
+    return this.getLoadoutWeapon().id;
   }
 
   getWeaponProfile() {
@@ -919,18 +1033,18 @@ export class Player {
 
   _syncWeaponStats() {
     const key = this.getWeaponKey();
-    const profile = this.weaponProfiles[key];
-    const store = this.weaponAmmo[key];
+    const profile = this.weaponProfiles[key] || this.getLoadoutWeapon();
+    const store = this.weaponAmmo[key] || this.weaponStates[key];
     this.ammo = store.ammo;
     this.totalAmmo = store.reserve;
     this.maxAmmo = profile.maxAmmo;
-    this.maxTotalAmmo = profile.maxReserve;
+    this.maxTotalAmmo = profile.maxReserve || profile.reserve;
     this.reloadDuration = profile.reload;
     this.fireRate = profile.fireRate;
   }
 
   _writeWeaponAmmo() {
-    const store = this.weaponAmmo[this.getWeaponKey()];
+    const store = this.weaponAmmo[this.getWeaponKey()] || this.weaponStates[this.getWeaponKey()];
     store.ammo = this.ammo;
     store.reserve = this.totalAmmo;
   }

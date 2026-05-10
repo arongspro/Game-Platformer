@@ -6,12 +6,13 @@ import { CameraController } from './camera.js';
 import { Player }           from './player.js';
 import { Network }          from './network.js';
 import { getRatingTier }    from './ranks.js';
+import { WEAPON_CATALOG, getWeaponById, normalizeLoadout } from './weapons.js';
 
 // ── 세션 체크 (로그인 안 했으면 login.html로) ──
 const rawUser = sessionStorage.getItem('vp_user');
 if (!rawUser) {
   window.location.href = 'login.html';
-  throw new Error('로그인 세션이 없어 login.html로 이동합니다.');
+  await new Promise(() => {});
 }
 const userInfo = JSON.parse(rawUser);
 
@@ -63,6 +64,9 @@ const roomInputEl       = document.getElementById('room-input');
 const roomCreateBtn     = document.getElementById('room-create-btn');
 const roomQuickBtn      = document.getElementById('room-quick-btn');
 const roomJoinBtn       = document.getElementById('room-join-btn');
+const mapSelectEl       = document.getElementById('map-select');
+const loadoutGridEl     = document.getElementById('loadout-grid');
+const loadoutSlotsEl    = document.getElementById('loadout-slots');
 
 const BASE_CENTER = new THREE.Vector3(0, 1, 5);
 const BASE_RADIUS = 17;
@@ -162,6 +166,13 @@ roomJoinBtn?.addEventListener('click', async e => {
   addKillfeed(`JOINED · ${network.roomId}`);
   updateRoomHud();
 });
+mapSelectEl?.addEventListener('change', () => {
+  renderer.setMap(mapSelectEl.value);
+  player.boxes = renderer.getBoxes();
+  player.grenadeSystem.boxes = renderer.getBoxes();
+  player.pos.set(0, 1, 5);
+  addKillfeed(`MAP · ${mapSelectEl.options[mapSelectEl.selectedIndex].textContent}`);
+});
 window.addEventListener('keyup', e => {
   if (e.code === 'Tab') showScoreboard(false);
 });
@@ -214,6 +225,8 @@ function updateScoreboard() {
 // ── HUD ──
 function updateHud() {
   player._syncWeaponStats();
+  const weapon = player.getLoadoutWeapon();
+  const weaponState = player.getLoadoutState();
   const hp  = player.health;
   const pct = hp / player.maxHealth;
   healthFill.style.width = (pct * 100) + '%';
@@ -224,20 +237,11 @@ function updateHud() {
   else if (pct <= 0.6) { healthFill.classList.add('warn'); healthNum.style.color = '#ffcc00'; }
   else                 { healthNum.style.color = ''; }
 
-  if (player.weaponSlot === 1) {
-    ammoCurrentEl.textContent = player.ammo;
-    ammoMaxEl.textContent     = '/ ' + player.maxAmmo + '  [' + player.totalAmmo + ']';
-    ammoMode.textContent      = '[' + player.fireMode + ']';
-  } else if (player.weaponSlot === 2) {
-    ammoCurrentEl.textContent = player.sniperAmmo;
-    ammoMaxEl.textContent     = '/ ' + player.sniperMaxAmmo + '  [' + player.sniperTotalAmmo + ']';
-    ammoMode.textContent      = player.sniperReloading ? '[RELOADING...]' : '[SEMI] 🔭';
-    ammoCurrentEl.classList.add('sniper-ammo');
-  } else if (player.weaponSlot === 5) {
-    ammoCurrentEl.textContent = player.pistolAmmo;
-    ammoMaxEl.textContent     = '/ ' + player.pistolMaxAmmo + '  [' + player.pistolTotalAmmo + ']';
-    ammoMode.textContent      = player.pistolReloading ? '[RELOADING...]' : '[SEMI] 🔫';
-    ammoCurrentEl.classList.remove('sniper-ammo');
+  if (player.weaponSlot === 1 || player.weaponSlot === 2 || player.weaponSlot === 5) {
+    ammoCurrentEl.textContent = weaponState.ammo;
+    ammoMaxEl.textContent     = '/ ' + weapon.maxAmmo + '  [' + weaponState.reserve + ']';
+    ammoMode.textContent      = weaponState.reloading ? '[RELOADING...]' : `[${weapon.mode}] ${weapon.name}`;
+    ammoCurrentEl.classList.toggle('sniper-ammo', !!weapon.scope);
   } else if (player.weaponSlot === 4) {
     ammoCurrentEl.textContent = '💣 ' + player.grenadeCount;
     ammoMaxEl.textContent     = '/ 3';
@@ -253,7 +257,7 @@ function updateHud() {
   reloadBar.classList.toggle('blocked', !isAtBase() && player.weaponSlot !== 4);
   updateTierHud();
   updateMatchHud();
-  reloadBar.classList.toggle('visible', player.isReloading || player.sniperReloading || player.pistolReloading);
+  reloadBar.classList.toggle('visible', player.isReloading || player.sniperReloading || player.pistolReloading || !!weaponState.reloading);
   bandageBar.classList.toggle('visible', player.isBandaging);
 
   const invincible = network.isInvincible();
@@ -307,6 +311,7 @@ const WEAPON_DAMAGE = {
   sniper: { HEAD:100, BODY: 40, LEGS: 40 },
   pistol: { HEAD: 30, BODY: 20, LEGS: 10 },
 };
+for (const weapon of WEAPON_CATALOG) WEAPON_DAMAGE[weapon.id] = weapon.damage;
 
 function rayVsCapsule(origin, front, center, halfH, radius) {
   const oc = origin.clone().sub(center);
@@ -544,7 +549,7 @@ window.addEventListener('keydown', e => {
 // ── 콜백 연결 ──
 player.onShoot     = () => {
   const front = camCtrl.getFront();
-  renderer.spawnMuzzleFlash(camCtrl.getHeadPos(), front, player.weaponSlot === 2);
+  renderer.spawnMuzzleFlash(camCtrl.getHeadPos(), front, player.getLoadoutWeapon().scope);
 };
 player.onHudUpdate = updateHud;
 player.onDie = () => {
@@ -654,7 +659,9 @@ function loop() {
     adsVignette.style.opacity = player.adsProgress;
 
     // 저격 스코프 FOV
-    camCtrl.setFovFromScope(player.weaponSlot === 2 ? player.scopeProgress : 0);
+    const speedPulse = player.speedBoost + (player.isSliding ? 0.045 : 0);
+    camCtrl.setFovFromScope(player.getLoadoutWeapon().scope ? player.scopeProgress : 0, speedPulse);
+    document.body.classList.toggle('speeding', speedPulse > 0.025);
 
     if (hitmarkerTimer > 0) {
       hitmarkerTimer -= dt * 1000;
@@ -663,10 +670,10 @@ function loop() {
 
     if (player.isReloading) {
       reloadFill.style.width = ((1 - player.reloadTimer/player.reloadDuration)*100) + '%';
-    } else if (player.sniperReloading) {
-      reloadFill.style.width = ((1 - player.sniperReloadTimer/player.sniperReloadDur)*100) + '%';
-    } else if (player.pistolReloading) {
-      reloadFill.style.width = ((1 - player.pistolReloadTimer/player.pistolReloadDur)*100) + '%';
+    } else if (player.getLoadoutState()?.reloading) {
+      const state = player.getLoadoutState();
+      const weapon = player.getLoadoutWeapon();
+      reloadFill.style.width = ((1 - state.reloadTimer / weapon.reload) * 100) + '%';
     }
     if (player.isBandaging) {
       bandageFill.style.width = ((1 - player.bandageTimer/player.bandageDuration)*100) + '%';
@@ -706,12 +713,12 @@ function loop() {
       slot3El.classList.toggle('active', player.weaponSlot === 3);
       if (grenadeCountUI) grenadeCountUI.textContent = `×${player.grenadeCount}`;
       if (bandageCountUI) bandageCountUI.textContent = `×${player.bandageCount}`;
-      if (sniperCountUI)  sniperCountUI.textContent  = `×${player.sniperAmmo}`;
-      if (pistolCountUI)  pistolCountUI.textContent  = `×${player.pistolAmmo}`;
+      if (sniperCountUI)  sniperCountUI.textContent  = player.getLoadoutWeapon(2).icon;
+      if (pistolCountUI)  pistolCountUI.textContent  = player.getLoadoutWeapon(5).icon;
     }
 
     // ── 저격 스코프 오버레이 ──
-    const scopeOn = player.weaponSlot === 2 && player.scopeProgress > 0.05;
+    const scopeOn = player.getLoadoutWeapon().scope && player.scopeProgress > 0.05;
     sniperScopeEl.style.display = scopeOn ? 'block' : 'none';
     if (scopeOn) {
       const W = window.innerWidth, H = window.innerHeight;
@@ -763,3 +770,48 @@ function loop() {
 updateHud();
 playerCountEl.textContent = 'PLAYERS: 1';
 loop();
+
+function renderLoadoutUi() {
+  if (!loadoutGridEl || !loadoutSlotsEl) return;
+  loadoutGridEl.innerHTML = '';
+  loadoutSlotsEl.innerHTML = '';
+  const loadout = normalizeLoadout(player.loadoutIds);
+  ['slot-1', 'slot-2', 'slot-5'].forEach((slotId, i) => {
+    const slotEl = document.getElementById(slotId);
+    const weapon = getWeaponById(loadout[i]);
+    slotEl?.querySelector('.weapon-icon') && (slotEl.querySelector('.weapon-icon').textContent = weapon.icon);
+    slotEl?.querySelector('.slot-name') && (slotEl.querySelector('.slot-name').textContent = weapon.name);
+  });
+  loadout.forEach((id, i) => {
+    const weapon = getWeaponById(id);
+    const slot = document.createElement('div');
+    slot.className = 'loadout-slot';
+    slot.textContent = `${i + 1}. ${weapon.name}`;
+    slot.style.borderColor = weapon.color;
+    loadoutSlotsEl.appendChild(slot);
+  });
+  for (const weapon of WEAPON_CATALOG) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'loadout-choice' + (loadout.includes(weapon.id) ? ' selected' : '');
+    btn.style.setProperty('--weapon-color', weapon.color);
+    btn.textContent = `${weapon.icon} ${weapon.name}`;
+    btn.addEventListener('click', e => {
+      e.preventDefault();
+      let next = normalizeLoadout(player.loadoutIds);
+      if (next.includes(weapon.id)) {
+        if (next.length > 1) next = next.filter(id => id !== weapon.id);
+      } else {
+        next.push(weapon.id);
+        if (next.length > 3) next.shift();
+      }
+      player.setLoadout(next);
+      renderLoadoutUi();
+      updateHud();
+    });
+    loadoutGridEl.appendChild(btn);
+  }
+}
+
+if (mapSelectEl) mapSelectEl.value = renderer.mapId;
+renderLoadoutUi();

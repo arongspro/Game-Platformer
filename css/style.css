@@ -376,6 +376,28 @@ body::before {
   animation: scanMove 2.2s linear infinite;
 }
 
+#speed-lines {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+  opacity: 0;
+  background:
+    radial-gradient(ellipse at center, transparent 30%, rgba(255,255,255,.08) 31%, transparent 33%),
+    repeating-conic-gradient(from 0deg at 50% 50%, transparent 0deg 8deg, rgba(0,255,224,.12) 9deg 10deg, transparent 11deg 18deg);
+  transform: scale(1.08);
+  transition: opacity .14s;
+  mix-blend-mode: screen;
+}
+body.speeding #speed-lines {
+  opacity: .28;
+  animation: speedRush .36s linear infinite;
+}
+@keyframes speedRush {
+  from { transform: scale(1.02) rotate(0deg); filter: blur(1px); }
+  to { transform: scale(1.18) rotate(1deg); filter: blur(0); }
+}
+
 body.hit-kick #canvas {
   animation: hitKick 0.12s ease-out;
 }

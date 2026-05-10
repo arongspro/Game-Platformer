@@ -361,6 +361,89 @@
       cursor: pointer;
     }
     .room-action:hover { background: rgba(0,255,224,0.16); }
+    #match-config {
+      width: min(680px, 92vw);
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 14px;
+      pointer-events: auto;
+      animation: panelWake .5s .24s cubic-bezier(.16,1,.3,1) both;
+    }
+    .config-block {
+      min-width: 0;
+      border: 1px solid rgba(0,255,224,.22);
+      background: rgba(0,0,0,.34);
+      padding: 12px;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.03);
+    }
+    .config-title {
+      font-size: 10px;
+      letter-spacing: 3px;
+      color: rgba(0,255,224,.72);
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+    }
+    #map-select {
+      width: 100%;
+      height: 38px;
+      color: #ffcc00;
+      background: rgba(0,0,0,.45);
+      border: 1px solid rgba(255,204,0,.35);
+      font-family: 'Share Tech Mono', monospace;
+      letter-spacing: 2px;
+      padding: 0 10px;
+    }
+    #loadout-slots {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    .loadout-slot {
+      min-height: 28px;
+      display: grid;
+      place-items: center;
+      font-size: 9px;
+      letter-spacing: 2px;
+      color: #fff;
+      border: 1px solid rgba(255,255,255,.22);
+      background: rgba(255,255,255,.04);
+      animation: slotActive .28s cubic-bezier(.16,1,.3,1) both;
+    }
+    #loadout-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
+    }
+    .loadout-choice {
+      min-width: 0;
+      height: 30px;
+      color: rgba(255,255,255,.72);
+      background: rgba(0,0,0,.32);
+      border: 1px solid rgba(255,255,255,.12);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 2px;
+      cursor: pointer;
+      transition: transform .12s, color .12s, border-color .12s, background .12s;
+    }
+    .loadout-choice:hover {
+      transform: translateY(-1px);
+      border-color: var(--weapon-color);
+      color: #fff;
+    }
+    .loadout-choice.selected {
+      color: var(--weapon-color);
+      border-color: var(--weapon-color);
+      background: color-mix(in srgb, var(--weapon-color) 12%, transparent);
+      box-shadow: 0 0 18px color-mix(in srgb, var(--weapon-color) 20%, transparent);
+    }
+    @media (max-width: 760px) {
+      #match-config { grid-template-columns: 1fr; }
+      #loadout-grid { grid-template-columns: 1fr; }
+    }
     #overlay-nav {
       position: absolute;
       top: 24px;
@@ -422,6 +505,7 @@
 
 <canvas id="canvas" tabindex="0"></canvas>
 <div id="scanlines"></div>
+<div id="speed-lines"></div>
 
 <!-- HUD -->
 <div id="hud">
@@ -569,6 +653,21 @@
     <button class="room-action" id="room-join-btn" type="button">JOIN</button>
     <button class="room-action" id="room-create-btn" type="button">CREATE</button>
     <button class="room-action" id="room-quick-btn" type="button">QUICK MATCH</button>
+  </div>
+  <div id="match-config">
+    <div class="config-block">
+      <div class="config-title"><span>MAP</span><span>ARENA</span></div>
+      <select id="map-select">
+        <option value="spire">SKY SPIRE</option>
+        <option value="circuit">NEON CIRCUIT</option>
+        <option value="crater">CRATER RUN</option>
+      </select>
+    </div>
+    <div class="config-block">
+      <div class="config-title"><span>LOADOUT</span><span>3 / 10</span></div>
+      <div id="loadout-slots"></div>
+      <div id="loadout-grid"></div>
+    </div>
   </div>
   <p style="font-size:11px;opacity:.35;letter-spacing:3px;margin-top:24px">
     WASD 이동 &nbsp;|&nbsp; SPACE 점프 &nbsp;|&nbsp; SHIFT 대시<br/><br/>

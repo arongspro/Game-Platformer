@@ -36,8 +36,8 @@ export class CameraController {
     this.pitch  = Math.max(-89, Math.min(89, this.pitch));
   }
 
-  setFovFromScope(scopeProgress) {
-    const baseFov   = 60;
+  setFovFromScope(scopeProgress, speedPulse = 0) {
+    const baseFov   = 60 + Math.min(8, speedPulse * 120);
     const sniperFov = 15;  // 저격 최대 줌
     const fov = baseFov + (sniperFov - baseFov) * scopeProgress;
     if (this.camera.fov !== fov) {

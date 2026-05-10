@@ -38,7 +38,11 @@ export class Renderer {
 
     this._buildTextures();
     this._setupLights();
-    this._buildWorld();
+    this.mapId = localStorage.getItem('vp_map_id') || 'spire';
+    this.jumpPads = [];
+    this.airPoints = [];
+    this.worldGroups = [];
+    this._buildWorld(this.mapId);
     this.particles = [];
 
     // 공유 OBJ 총 (원격 플레이어용)
@@ -101,68 +105,141 @@ export class Renderer {
     this.scene.add(fill);
   }
 
-  _buildWorld() {
-    this.boxMeshes = [];
-    const T = { checker:this.texChecker, stripe:this.texStripe, noise:this.texNoise, solid:this.texSolid };
-
-    const boxes = [
+  _mapData(mapId) {
+    const base = [
       [0,-30,80,   400,1,400,   0x0d0d15,'checker'],
       [0,0,0,      15,1,15,     0xccccda,'checker'],
       [-14,1.5,-14,0.5,1,0.5,  0xb39933,'stripe'],
       [14,1.5,-14, 0.5,1,0.5,  0xb39933,'stripe'],
       [-14,1.5,14, 0.5,1,0.5,  0xb39933,'stripe'],
       [14,1.5,14,  0.5,1,0.5,  0xb39933,'stripe'],
-      [0,1,12,     4,0.5,4,    0x7fa0b3,'solid'],
-      [0,2,15,     4,0.5,4,    0x7fa0b3,'solid'],
-      [0,3,18,     4,0.5,4,    0x7fa0b3,'solid'],
-      [0,4,21,     4,0.5,4,    0x7fa0b3,'solid'],
-      [0,5,35,     15,1,15,    0x4d5966,'checker'],
-      [-6,6.5,37,  2,1,2,      0x666666,'stripe'],
-      [8,6.8,40,   1.5,1.3,1.5,0x666666,'stripe'],
-      [-4,6.2,45,  3,0.7,1.5,  0x666666,'stripe'],
-      [5,6.5,47,   1,1,3,      0x666666,'stripe'],
-      [-13,8,42,   1,3,1,      0x333333,'solid'],
-      [-13,11.5,42,1.5,0.5,1.5,0xccb833,'solid'],
-      [13,8,42,    1,3,1,      0x333333,'solid'],
-      [13,11.5,42, 1.5,0.5,1.5,0xccb833,'solid'],
-      [0,6,54,     3,0.2,3,    0xe69a1a,'solid'],
-      [-4,7,60,    3,0.2,3,    0xe69a1a,'solid'],
-      [-8,8,66,    3,0.2,3,    0xe69a1a,'solid'],
-      [-4,9,72,    3,0.2,3,    0xe69a1a,'solid'],
-      [0,10,78,    3,0.2,3,    0xe69a1a,'solid'],
-      [4,11,84,    3,0.2,3,    0xe69a1a,'solid'],
-      [0,12,90,    3,0.2,3,    0xe69a1a,'solid'],
-      [0,13,99,    10,0.5,10,  0xccd9e6,'checker'],
-      [-8,14.5,99, 1,1.5,1,    0x999999,'solid'],
-      [8,14.5,99,  1,1.5,1,    0x999999,'solid'],
-      [0,16.5,99,  9,0.5,1,    0x999999,'solid'],
-      [0,15,99,    2,2,2,      0xffcc33,'noise'],
-      [0,14,109,   4,0.5,4,    0x80b3e6,'solid'],
-      [0,15,115,   3,0.5,3,    0x80b3e6,'solid'],
-      [0,16,121,   3,0.5,3,    0x80b3e6,'solid'],
-      [-5,17,124,  3,0.2,3,    0xe63333,'solid'],
-      [-11,18,126, 3,0.2,3,    0xe63333,'solid'],
-      [-14,19,128, 3,0.2,3,    0xe63333,'solid'],
-      [-11,20,130, 3,0.2,3,    0xe63333,'solid'],
-      [-5,21,132,  3,0.2,3,    0xe63333,'solid'],
-      [0,22,136,   3,0.2,3,    0xe63333,'solid'],
-      [0,23,162,   25,1,25,    0xf2f2ff,'checker'],
-      [-15,27.5,152,2,10,2,    0xccccdd,'stripe'],
-      [15,27.5,152, 2,10,2,    0xccccdd,'stripe'],
-      [0,32,152,   32,1,4,     0xccccdd,'solid'],
-      [0,25,152,   3,4,3,      0x9933dd,'noise'],
-      [0,29,152,   1.5,1.5,1.5,0xe6ccff,'noise'],
     ];
+    const maps = {
+      spire: {
+        name: 'SKY SPIRE',
+        background: 0x6699cc,
+        boxes: [
+          ...base,
+          [0,1,12,4,0.5,4,0x7fa0b3,'solid'], [0,2,15,4,0.5,4,0x7fa0b3,'solid'], [0,3,18,4,0.5,4,0x7fa0b3,'solid'],
+          [0,4,21,4,0.5,4,0x7fa0b3,'solid'], [0,5,35,15,1,15,0x4d5966,'checker'], [-6,6.5,37,2,1,2,0x666666,'stripe'],
+          [8,6.8,40,1.5,1.3,1.5,0x666666,'stripe'], [-4,6.2,45,3,0.7,1.5,0x666666,'stripe'], [5,6.5,47,1,1,3,0x666666,'stripe'],
+          [-13,8,42,1,3,1,0x333333,'solid'], [-13,11.5,42,1.5,0.5,1.5,0xccb833,'solid'], [13,8,42,1,3,1,0x333333,'solid'],
+          [13,11.5,42,1.5,0.5,1.5,0xccb833,'solid'], [0,6,54,3,0.2,3,0xe69a1a,'solid'], [-4,7,60,3,0.2,3,0xe69a1a,'solid'],
+          [-8,8,66,3,0.2,3,0xe69a1a,'solid'], [-4,9,72,3,0.2,3,0xe69a1a,'solid'], [0,10,78,3,0.2,3,0xe69a1a,'solid'],
+          [4,11,84,3,0.2,3,0xe69a1a,'solid'], [0,12,90,3,0.2,3,0xe69a1a,'solid'], [0,13,99,10,0.5,10,0xccd9e6,'checker'],
+          [-8,14.5,99,1,1.5,1,0x999999,'solid'], [8,14.5,99,1,1.5,1,0x999999,'solid'], [0,16.5,99,9,0.5,1,0x999999,'solid'],
+          [0,15,99,2,2,2,0xffcc33,'noise'], [0,14,109,4,0.5,4,0x80b3e6,'solid'], [0,15,115,3,0.5,3,0x80b3e6,'solid'],
+          [0,16,121,3,0.5,3,0x80b3e6,'solid'], [-5,17,124,3,0.2,3,0xe63333,'solid'], [-11,18,126,3,0.2,3,0xe63333,'solid'],
+          [-14,19,128,3,0.2,3,0xe63333,'solid'], [-11,20,130,3,0.2,3,0xe63333,'solid'], [-5,21,132,3,0.2,3,0xe63333,'solid'],
+          [0,22,136,3,0.2,3,0xe63333,'solid'], [0,23,162,25,1,25,0xf2f2ff,'checker'], [-15,27.5,152,2,10,2,0xccccdd,'stripe'],
+          [15,27.5,152,2,10,2,0xccccdd,'stripe'], [0,32,152,32,1,4,0xccccdd,'solid'], [0,25,152,3,4,3,0x9933dd,'noise'],
+          [0,29,152,1.5,1.5,1.5,0xe6ccff,'noise'],
+        ],
+      },
+      circuit: {
+        name: 'NEON CIRCUIT',
+        background: 0x253850,
+        boxes: [
+          ...base,
+          [0,1,36,28,1,12,0x1d4254,'checker'], [-22,4,58,7,0.5,7,0x00b3aa,'solid'], [22,4,58,7,0.5,7,0xffcc33,'solid'],
+          [0,7,78,18,0.5,8,0x334455,'checker'], [-18,11,100,8,0.5,8,0xff66c4,'solid'], [18,11,100,8,0.5,8,0xe63333,'solid'],
+          [0,15,126,22,0.5,10,0x80b3e6,'checker'], [0,18,152,12,0.5,12,0xf2f2ff,'solid'],
+          [-26,8,80,2,8,2,0x111111,'solid'], [26,8,80,2,8,2,0x111111,'solid'], [0,21,152,3,4,3,0x9933dd,'noise'],
+        ],
+      },
+      crater: {
+        name: 'CRATER RUN',
+        background: 0x735b4a,
+        boxes: [
+          ...base,
+          [0,1,34,20,1,18,0x8a6a50,'noise'], [-18,4,58,7,0.6,7,0xb46f3c,'noise'], [18,5,62,8,0.6,8,0xb46f3c,'noise'],
+          [0,8,84,13,0.6,13,0x5b4638,'checker'], [-20,12,108,9,0.6,9,0xe69a1a,'solid'], [20,14,114,9,0.6,9,0xe63333,'solid'],
+          [0,18,140,18,0.8,18,0xf2f2ff,'checker'], [-10,20,148,2,5,2,0x333333,'solid'], [10,20,148,2,5,2,0x333333,'solid'],
+        ],
+      },
+    };
+    return maps[mapId] || maps.spire;
+  }
 
-    boxes.forEach(([x,y,z, sx,sy,sz, hex, tk]) => {
+  _buildWorld(mapId = 'spire') {
+    for (const group of this.worldGroups || []) this.scene.remove(group);
+    this.boxMeshes = [];
+    this.jumpPads = [];
+    this.airPoints = [];
+    this.worldGroups = [];
+    const T = { checker:this.texChecker, stripe:this.texStripe, noise:this.texNoise, solid:this.texSolid };
+    const map = this._mapData(mapId);
+    this.mapId = mapId;
+    localStorage.setItem('vp_map_id', mapId);
+    this.scene.background = new THREE.Color(map.background);
+    this.scene.fog.color.set(map.background);
+
+    map.boxes.forEach(([x,y,z, sx,sy,sz, hex, tk]) => {
       const geo  = new THREE.BoxGeometry(sx*2, sy*2, sz*2);
       const mat  = new THREE.MeshLambertMaterial({ color: hex, map: T[tk] });
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(x, y, z);
       mesh.castShadow = mesh.receiveShadow = true;
       this.scene.add(mesh);
+      this.worldGroups.push(mesh);
       this.boxMeshes.push({ pos:[x,y,z], size:[sx,sy,sz] });
     });
+    this._buildBoosters();
+  }
+
+  setMap(mapId) {
+    this._buildWorld(mapId);
+  }
+
+  _buildBoosters() {
+    const mkPad = (x, y, z, color, power, speed = 0.02) => {
+      const mesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.35, 1.35, 0.18, 24),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.82 })
+      );
+      mesh.position.set(x, y, z);
+      this.scene.add(mesh);
+      this.worldGroups.push(mesh);
+      this.jumpPads.push({ pos: new THREE.Vector3(x, y, z), radius: 1.65, power, speed, color });
+    };
+    const mkPoint = (x, y, z, color, power, speed = 0.016, type = 'jump') => {
+      const mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(0.55, 16, 16),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: type === 'drop' ? 0.55 : 0.72 })
+      );
+      mesh.position.set(x, y, z);
+      this.scene.add(mesh);
+      this.worldGroups.push(mesh);
+      this.airPoints.push({ pos: new THREE.Vector3(x, y, z), radius: 1.35, power, speed, color, type, mesh });
+    };
+    mkPad(-8, 1.15, 10, 0xff66c4, 0.38, 0.016);
+    mkPad(8, 1.15, 10, 0xffcc33, 0.58, 0.022);
+    mkPad(0, 6.15, 48, 0xe63333, 0.82, 0.035);
+    mkPoint(-7, 9, 64, 0xff66c4, 0.34, 0.014);
+    mkPoint(8, 13, 92, 0xffcc33, 0.56, 0.02);
+    mkPoint(-10, 18, 122, 0xe63333, 0.78, 0.032);
+    mkPoint(10, 22, 136, 0x050505, -0.65, 0, 'drop');
+  }
+
+  getJumpPadAt(pos) {
+    return this.jumpPads.find(p => Math.abs(pos.y - p.pos.y) < 1.2 && pos.distanceTo(p.pos) < p.radius);
+  }
+
+  getAirPointAt(pos) {
+    return this.airPoints.find(p => pos.distanceTo(p.pos) < p.radius);
+  }
+
+  spawnPadBurst(position, color = 0xff66c4) {
+    for (let i = 0; i < 10; i++) {
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(0.045, 0.045, 0.045),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9 })
+      );
+      mesh.position.copy(position);
+      const vel = new THREE.Vector3((Math.random()-0.5)*0.16, Math.random()*0.18+0.03, (Math.random()-0.5)*0.16);
+      this.scene.add(mesh);
+      this.particles.push({ mesh, vel, life: 0.5, type: 'spark', baseSize: 1 });
+    }
   }
 
   // ── 원격 플레이어 풀바디 (Python draw_player_full 직역) ──
