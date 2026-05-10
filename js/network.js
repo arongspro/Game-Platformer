@@ -2,7 +2,7 @@
 // 보안 경로(/players, /hits, /users)와 게임 데이터 경로(/rooms)를 분리
 
 import { initializeApp, getApps } from 'firebase/app';
-import { getDatabase, ref, set, onValue, remove, onDisconnect, get, child, update }
+import { getDatabase, ref, set, onValue, remove, onDisconnect, get, child, update, serverTimestamp }
   from 'firebase/database';
 import { getAuth } from 'firebase/auth';
 
@@ -240,7 +240,7 @@ export class Network {
     set(ref(this.db, `players/${this.myUid}`), {
       pos,
       nickname: this.nickname,
-      ts:       now,
+      ts:       serverTimestamp(),
     }).catch(() => {});
 
     // 2) 게임 데이터 경로: 렌더링에 필요한 모든 데이터 (규칙 없음)
@@ -328,7 +328,7 @@ export class Network {
 
     // 보안 경로 업데이트
     set(ref(this.db, `players/${this.myUid}`), {
-      pos, nickname: this.nickname, ts: now,
+      pos, nickname: this.nickname, ts: serverTimestamp(),
     }).catch(() => {});
 
     // 게임 데이터 경로 업데이트
@@ -360,3 +360,4 @@ export class Network {
     return Object.keys(this.otherPlayers).length + 1;
   }
 }
+//수정후
