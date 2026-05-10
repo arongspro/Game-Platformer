@@ -5,6 +5,7 @@ import { Renderer }         from './renderer.js';
 import { CameraController } from './camera.js';
 import { Player }           from './player.js';
 import { Network }          from './network.js';
+import { getRatingTier }    from './ranks.js';
 
 // ── 세션 체크 (로그인 안 했으면 login.html로) ──
 const rawUser = sessionStorage.getItem('vp_user');
@@ -46,6 +47,26 @@ const sniperCountUI     = document.getElementById('sniper-count-ui');
 const pistolCountUI     = document.getElementById('pistol-count-ui');
 const sniperScopeEl     = document.getElementById('sniper-scope');
 const scopeCanvas       = document.getElementById('scope-canvas');
+const matchGoalEl       = document.getElementById('match-goal');
+const matchKillsEl      = document.getElementById('match-kills');
+const matchStatusEl     = document.getElementById('match-status');
+const tierNameEl        = document.getElementById('tier-name');
+const tierRatingEl      = document.getElementById('tier-rating');
+const tierBadgeEl       = document.getElementById('tier-badge');
+const matchLimitSelect  = document.getElementById('match-limit-select');
+const roomCodeEl        = document.getElementById('room-code');
+const roomStatusEl      = document.getElementById('room-status');
+const roomInputEl       = document.getElementById('room-input');
+const roomCreateBtn     = document.getElementById('room-create-btn');
+const roomQuickBtn      = document.getElementById('room-quick-btn');
+const roomJoinBtn       = document.getElementById('room-join-btn');
+
+const BASE_CENTER = new THREE.Vector3(0, 1, 5);
+const BASE_RADIUS = 17;
+const storedLimit = Number(localStorage.getItem('vp_match_limit') || 10);
+let matchKillLimit = storedLimit === 20 ? 20 : 10;
+let matchEnded = false;
+if (matchLimitSelect) matchLimitSelect.value = String(matchKillLimit);
 
 // 닉네임 표시
 myNickEl.textContent = userInfo.nickname;
@@ -55,6 +76,7 @@ const renderer = new Renderer(canvas);
 const camCtrl  = new CameraController(renderer.camera);
 const player   = new Player(renderer.getBoxes(), renderer);
 const network  = new Network(userInfo);
+player.canUseBaseAction = () => isAtBase();
 
 // 로컬 플레이어 픽셀 캐릭터 적용
 setTimeout(() => {
@@ -72,6 +94,8 @@ function tryLock() {
 
 lockBtn.addEventListener('click', e => { e.preventDefault(); tryLock(); });
 lockOverlay.addEventListener('click', e => { e.preventDefault(); tryLock(); });
+document.getElementById('room-panel')?.addEventListener('click', e => e.stopPropagation());
+document.getElementById('match-limit-wrap')?.addEventListener('click', e => e.stopPropagation());
 
 function isLocked() {
   return document.pointerLockElement === canvas ||
@@ -108,6 +132,33 @@ window.addEventListener('keydown', e => {
     showScoreboard(true);
   }
 });
+matchLimitSelect?.addEventListener('change', async () => {
+  matchKillLimit = Number(matchLimitSelect.value) === 20 ? 20 : 10;
+  localStorage.setItem('vp_match_limit', String(matchKillLimit));
+  matchEnded = false;
+  await network.updateRoomLimit(matchKillLimit);
+  updateMatchHud();
+});
+roomCreateBtn?.addEventListener('click', async e => {
+  e.preventDefault();
+  await network.createRoom(matchKillLimit);
+  addKillfeed(`ROOM CREATED · ${network.roomId}`);
+  updateRoomHud();
+});
+roomQuickBtn?.addEventListener('click', async e => {
+  e.preventDefault();
+  await network.quickMatch(matchKillLimit);
+  addKillfeed(`MATCHED · ${network.roomId}`);
+  updateRoomHud();
+});
+roomJoinBtn?.addEventListener('click', async e => {
+  e.preventDefault();
+  const code = roomInputEl?.value?.trim();
+  if (!code) return;
+  await network.joinRoom(code);
+  addKillfeed(`JOINED · ${network.roomId}`);
+  updateRoomHud();
+});
 window.addEventListener('keyup', e => {
   if (e.code === 'Tab') showScoreboard(false);
 });
@@ -128,11 +179,12 @@ function updateScoreboard() {
 
   // 내 정보
   const allPlayers = [
-    { nick: network.nickname, kills: network.kills, deaths: network.deaths, isMe: true },
+    { nick: network.nickname, kills: network.kills, deaths: network.deaths, rating: network.rating, isMe: true },
     ...Object.values(network.otherPlayers).map(p => ({
       nick:   p.nickname || '???',
       kills:  p.kills  || 0,
       deaths: p.deaths || 0,
+      rating: p.rating || 0,
       isMe:   false,
     }))
   ];
@@ -142,6 +194,7 @@ function updateScoreboard() {
 
   allPlayers.forEach((p, i) => {
     const kd = p.deaths === 0 ? p.kills.toFixed(1) : (p.kills/p.deaths).toFixed(2);
+    const tier = getRatingTier(p.rating || 0);
     const row = document.createElement('div');
     row.className = 'sb-row' + (p.isMe ? ' sb-me' : '');
     row.innerHTML = `
@@ -149,7 +202,7 @@ function updateScoreboard() {
       <span class="sb-nick">${p.isMe ? '▶ ' : ''}${p.nick}</span>
       <span class="sb-kills">${p.kills}</span>
       <span class="sb-deaths">${p.deaths}</span>
-      <span class="sb-kd">${kd}</span>
+      <span class="sb-kd" style="color:${tier.color}">${tier.name} · ${kd}</span>
     `;
     rows.appendChild(row);
   });
@@ -157,6 +210,7 @@ function updateScoreboard() {
 
 // ── HUD ──
 function updateHud() {
+  player._syncWeaponStats();
   const hp  = player.health;
   const pct = hp / player.maxHealth;
   healthFill.style.width = (pct * 100) + '%';
@@ -175,16 +229,27 @@ function updateHud() {
     ammoCurrentEl.textContent = player.sniperAmmo;
     ammoMaxEl.textContent     = '/ ' + player.sniperMaxAmmo + '  [' + player.sniperTotalAmmo + ']';
     ammoMode.textContent      = player.sniperReloading ? '[RELOADING...]' : '[SEMI] 🔭';
+    ammoCurrentEl.classList.add('sniper-ammo');
   } else if (player.weaponSlot === 5) {
     ammoCurrentEl.textContent = player.pistolAmmo;
     ammoMaxEl.textContent     = '/ ' + player.pistolMaxAmmo + '  [' + player.pistolTotalAmmo + ']';
     ammoMode.textContent      = player.pistolReloading ? '[RELOADING...]' : '[SEMI] 🔫';
+    ammoCurrentEl.classList.remove('sniper-ammo');
   } else if (player.weaponSlot === 4) {
     ammoCurrentEl.textContent = '💣 ' + player.grenadeCount;
     ammoMaxEl.textContent     = '/ 3';
     const charge = Math.round((player.grenadeCharge / player.grenadeMaxCharge) * 100);
     ammoMode.textContent      = player.isChargingGrenade ? `[CHARGE ${charge}%]` : '[GRENADE]';
+    ammoCurrentEl.classList.remove('sniper-ammo');
+  } else if (player.weaponSlot === 3) {
+    ammoCurrentEl.textContent = 'BANDAGE';
+    ammoMaxEl.textContent     = `× ${player.bandageCount}`;
+    ammoMode.textContent      = isAtBase() ? '[BASE HEAL]' : '[BASE ONLY]';
+    ammoCurrentEl.classList.remove('sniper-ammo');
   }
+  reloadBar.classList.toggle('blocked', !isAtBase() && player.weaponSlot !== 4);
+  updateTierHud();
+  updateMatchHud();
   reloadBar.classList.toggle('visible', player.isReloading || player.sniperReloading || player.pistolReloading);
   bandageBar.classList.toggle('visible', player.isBandaging);
 
@@ -210,6 +275,12 @@ function showHitmarker(isHeadshot = false) {
   hitmarkerTimer = isHeadshot ? 350 : 200;
 }
 
+function pulseHitEffect(isHeadshot = false) {
+  document.body.classList.remove('hit-kick', 'headshot-kick');
+  void document.body.offsetWidth;
+  document.body.classList.add(isHeadshot ? 'headshot-kick' : 'hit-kick');
+}
+
 // ── 킬피드 ──
 function addKillfeed(text, isKill = false) {
   const el = document.createElement('div');
@@ -222,9 +293,9 @@ function addKillfeed(text, isKill = false) {
 // ── 부위별 히트박스 레이캐스트 ──
 // 기본 데미지 (M4A1 기준)
 const HITBOXES = [
-  { name:'HEAD', offsetY:1.95, halfH:0.27, radius:0.28, damage:20 },
-  { name:'BODY', offsetY:1.25, halfH:0.35, radius:0.38, damage:10 },
-  { name:'LEGS', offsetY:0.45, halfH:0.45, radius:0.28, damage: 5 },
+  { name:'HEAD', offsetY:1.95, halfH:0.27, radius:0.28, rifle:20, sniper:100 },
+  { name:'BODY', offsetY:1.25, halfH:0.35, radius:0.38, rifle:10, sniper:40 },
+  { name:'LEGS', offsetY:0.45, halfH:0.45, radius:0.28, rifle: 5, sniper:25 },
 ];
 
 // 무기별 데미지 테이블
@@ -291,7 +362,9 @@ function wallBlockDist(origin, front) {
 function checkHit(weaponType = 'rifle') {
   const origin = camCtrl.getHeadPos();
   const front  = camCtrl.getFront();
+  const weaponKey = player.getWeaponKey();
   let bestDist=200, hitTarget=null, hitDamage=0, hitPart='';
+  let hitPoint = null;
 
   // 벽까지의 거리 — 이보다 멀리 있는 플레이어는 맞지 않음
   const wallDist = wallBlockDist(origin, front);
@@ -307,6 +380,7 @@ function checkHit(weaponType = 'rifle') {
         bestDist = t; hitTarget = pid;
         hitDamage = dmgTable[hb.name] ?? hb.damage;
         hitPart = hb.name;
+        hitPoint = origin.clone().addScaledVector(front, t);
       }
     }
   }
@@ -314,10 +388,59 @@ function checkHit(weaponType = 'rifle') {
   if (hitTarget) {
     network.sendHit(hitTarget, hitDamage);
     showHitmarker(hitPart === 'HEAD');
-    const icon = hitPart==='HEAD' ? '🎯' : hitPart==='BODY' ? '💥' : '🦵';
+    pulseHitEffect(hitPart === 'HEAD');
+    if (hitPoint) renderer.spawnBulletImpact(hitPoint, hitPart === 'HEAD');
+    const icon = hitPart==='HEAD' ? 'HEAD' : hitPart==='BODY' ? 'BODY' : 'LEG';
     const targetNick = network.otherPlayers[hitTarget]?.nickname || hitTarget.slice(-4);
     addKillfeed(`${icon} ${hitPart} +${hitDamage} → ${targetNick}`);
   }
+}
+
+function isAtBase() {
+  return player.pos.distanceTo(BASE_CENTER) <= BASE_RADIUS;
+}
+
+function updateTierHud() {
+  if (!tierNameEl || !tierRatingEl || !tierBadgeEl) return;
+  const tier = getRatingTier(network.rating);
+  tierNameEl.textContent = tier.name;
+  tierRatingEl.textContent = `${network.rating} RP`;
+  const badgeText = tier.name === '챌린저' ? 'C' : (tier.name.split(' ')[1] || 'V');
+  const badgeInner = tierBadgeEl.querySelector('span');
+  if (badgeInner) badgeInner.textContent = badgeText;
+  tierBadgeEl.style.borderColor = tier.color;
+  tierBadgeEl.style.color = tier.color;
+  tierBadgeEl.style.boxShadow = `0 0 18px ${tier.color}55`;
+}
+
+function updateMatchHud() {
+  if (!matchGoalEl || !matchKillsEl || !matchStatusEl) return;
+  matchGoalEl.textContent = `${matchKillLimit} KILLS`;
+  matchKillsEl.textContent = `${network.kills}/${matchKillLimit}`;
+  const remaining = Math.max(0, matchKillLimit - network.kills);
+  matchStatusEl.textContent = matchEnded ? 'VICTORY' : isAtBase() ? `BASE · ${remaining} LEFT` : `${remaining} LEFT`;
+  matchStatusEl.classList.toggle('base', isAtBase());
+  matchStatusEl.classList.toggle('victory', matchEnded);
+}
+
+function updateRoomHud(meta = null) {
+  const room = meta || {
+    id: network.roomId,
+    limit: network.matchLimit,
+    status: network.roomStatus,
+    winner: network.roomWinner,
+  };
+  if (roomCodeEl) roomCodeEl.textContent = `ROOM ${room.id}`;
+  if (roomStatusEl) {
+    const winner = room.winner ? ` · WINNER ${room.winner}` : '';
+    roomStatusEl.textContent = `${String(room.status || 'waiting').toUpperCase()} · ${room.limit} KILLS${winner}`;
+  }
+  if (matchLimitSelect && Number(matchLimitSelect.value) !== Number(room.limit)) {
+    matchLimitSelect.value = String(room.limit);
+  }
+  matchKillLimit = Number(room.limit || matchKillLimit || 10);
+  matchEnded = room.status === 'ended';
+  updateMatchHud();
 }
 
 // ── 보급상자 ──
@@ -416,7 +539,10 @@ window.addEventListener('keydown', e => {
 });
 
 // ── 콜백 연결 ──
-player.onShoot     = () => {};
+player.onShoot     = () => {
+  const front = camCtrl.getFront();
+  renderer.spawnMuzzleFlash(camCtrl.getHeadPos(), front, player.weaponSlot === 2);
+};
 player.onHudUpdate = updateHud;
 player.onDie = () => {
   deathScreen.classList.add('active');
@@ -427,12 +553,28 @@ player.onDie = () => {
 };
 
 // ── 수류탄 폭발 콜백 (직접 연결, setTimeout 없음) ──
-player.grenadeSystem.onExplode = (pos, radius, maxDamage) => {
+player.grenadeSystem.getContactTargets = () => [
+  ...Object.entries(network.otherPlayers)
+    .filter(([, info]) => info?.pos)
+    .map(([id, info]) => ({ id, pos: new THREE.Vector3(info.pos[0], info.pos[1], info.pos[2]), radius: 0.58, height: 1.8 })),
+];
+
+player.grenadeSystem.onExplode = (pos, radius, maxDamage, meta = {}) => {
   // 내 위치 기준 화면 흔들림
-  const myDist = player.pos.distanceTo(pos);
+  const myCenter = player.pos.clone(); myCenter.y += 0.9;
+  const myDist = myCenter.distanceTo(pos);
   if (myDist < radius * 1.5) {
     dmgFlash.classList.add('active');
     setTimeout(() => dmgFlash.classList.remove('active'), myDist < 3 ? 400 : 150);
+  }
+  if (myDist < radius) {
+    const falloff = Math.max(0, 1 - (myDist / radius));
+    const selfDmg = Math.round(maxDamage * falloff * falloff * 0.75);
+    if (selfDmg > 0) {
+      player.health = Math.max(0, player.health - selfDmg);
+      player.applyKnockback(pos, 1.8 + falloff * 4.2);
+      addKillfeed(`GRENADE SELF ${selfDmg}`);
+    }
   }
 
   // 다른 플레이어 피해
@@ -451,7 +593,7 @@ player.grenadeSystem.onExplode = (pos, radius, maxDamage) => {
       }
     }
   }
-  addKillfeed('💥 EXPLOSION!');
+  addKillfeed(meta.contact ? 'CONTACT EXPLOSION!' : 'EXPLOSION!');
   updateHud();
 };
 
@@ -475,12 +617,25 @@ network.onHealthUpdate = (hp) => {
   player.health = hp;
   updateHud();
   dmgFlash.classList.add('active');
+  pulseHitEffect(false);
   setTimeout(() => dmgFlash.classList.remove('active'), 150);
+};
+
+network.onRoomUpdate = (room) => {
+  updateRoomHud(room);
+  if (room.status === 'ended' && room.winner) {
+    matchEnded = true;
+  }
 };
 
 network.onKill = (targetId, kills, deaths) => {
   const targetNick = network.otherPlayers[targetId]?.nickname || targetId.slice(-4);
   addKillfeed(`☠️ ${network.nickname} → ${targetNick}`, true);
+  if (kills >= matchKillLimit && !matchEnded) {
+    matchEnded = true;
+    addKillfeed(`MATCH WIN · ${matchKillLimit} KILLS`, true);
+  }
+  updateHud();
 };
 
 // ── 메인 루프 ──

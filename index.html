@@ -53,7 +53,7 @@
     .sb-hint { font-size:9px; opacity:.35; letter-spacing:3px; }
     .sb-header {
       display: grid;
-      grid-template-columns: 40px 1fr 70px 70px 70px;
+      grid-template-columns: 40px 1fr 70px 70px 140px;
       padding: 8px 24px;
       font-size: 9px;
       letter-spacing: 3px;
@@ -63,7 +63,7 @@
     .sb-rows { max-height: 320px; overflow-y: auto; }
     .sb-row {
       display: grid;
-      grid-template-columns: 40px 1fr 70px 70px 70px;
+      grid-template-columns: 40px 1fr 70px 70px 140px;
       padding: 10px 24px;
       font-size: 13px;
       border-bottom: 1px solid rgba(255,255,255,0.04);
@@ -181,6 +181,129 @@
     }
     .slot-name { font-size: 10px; letter-spacing: 2px; }
     .slot-count { font-size: 9px; opacity: 0.6; }
+
+    #match-panel {
+      position: fixed;
+      top: 66px;
+      left: 32px;
+      display: grid;
+      gap: 3px;
+      pointer-events: none;
+      text-align: left;
+    }
+    #match-goal {
+      font-family: 'Orbitron', monospace;
+      font-size: 13px;
+      letter-spacing: 3px;
+      color: #ffcc00;
+    }
+    #match-kills {
+      font-family: 'Orbitron', monospace;
+      font-size: 22px;
+      font-weight: 900;
+      color: #ffffff;
+    }
+    #match-status {
+      font-size: 10px;
+      letter-spacing: 3px;
+      opacity: .55;
+    }
+    #match-status.base { color: #00ee88; opacity: 1; }
+    #match-status.victory { color: #ffcc00; opacity: 1; }
+    #tier-panel {
+      position: fixed;
+      top: 64px;
+      right: 32px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      pointer-events: none;
+    }
+    #tier-badge {
+      width: 36px;
+      height: 36px;
+      border: 1px solid currentColor;
+      display: grid;
+      place-items: center;
+      font-family: 'Orbitron', monospace;
+      font-size: 18px;
+      font-weight: 900;
+      transform: rotate(45deg);
+    }
+    #tier-badge span { transform: rotate(-45deg); }
+    #tier-text { text-align: right; }
+    #tier-name {
+      font-family: 'Orbitron', monospace;
+      font-size: 12px;
+      letter-spacing: 3px;
+    }
+    #tier-rating {
+      margin-top: 3px;
+      font-size: 10px;
+      letter-spacing: 2px;
+      opacity: .55;
+    }
+    #match-limit-wrap {
+      margin-top: 18px;
+      font-size: 10px;
+      letter-spacing: 3px;
+      opacity: .65;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    #match-limit-select {
+      color: #00ffe0;
+      background: rgba(0,0,0,0.4);
+      border: 1px solid rgba(0,255,224,0.35);
+      padding: 5px 8px;
+      font-family: 'Share Tech Mono', monospace;
+      pointer-events: auto;
+    }
+    #room-panel {
+      margin-top: 18px;
+      width: min(520px, 92vw);
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 8px;
+      align-items: center;
+      pointer-events: auto;
+      font-family: 'Share Tech Mono', monospace;
+    }
+    #room-info {
+      grid-column: 1 / -1;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      color: rgba(255,255,255,0.72);
+      font-size: 10px;
+      letter-spacing: 3px;
+    }
+    #room-code { color: #00ffe0; }
+    #room-status { color: #ffcc00; text-align: right; }
+    #room-input {
+      min-width: 0;
+      height: 36px;
+      color: #ffffff;
+      background: rgba(0,0,0,0.45);
+      border: 1px solid rgba(0,255,224,0.35);
+      padding: 0 12px;
+      font-family: 'Share Tech Mono', monospace;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+    }
+    .room-action {
+      height: 36px;
+      color: #00ffe0;
+      background: rgba(0,255,224,0.08);
+      border: 1px solid rgba(0,255,224,0.35);
+      padding: 0 12px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 2px;
+      cursor: pointer;
+    }
+    .room-action:hover { background: rgba(0,255,224,0.16); }
   </style>
 </head>
 <body>
@@ -200,6 +323,20 @@
   </div>
   <div id="player-count">PLAYERS: 1</div>
   <div id="killfeed"></div>
+
+  <div id="match-panel">
+    <div id="match-goal">10 KILLS</div>
+    <div id="match-kills">0/10</div>
+    <div id="match-status">BASE</div>
+  </div>
+
+  <div id="tier-panel">
+    <div id="tier-text">
+      <div id="tier-name">아이언 V</div>
+      <div id="tier-rating">0 RP</div>
+    </div>
+    <div id="tier-badge"><span>V</span></div>
+  </div>
 
   <div id="health-bar">
     <div id="health-label">HEALTH</div>
@@ -293,10 +430,27 @@
   <h1>VOID PROTOCOL</h1>
   <p>MULTIPLAYER · PARKOUR · FPS</p>
   <button id="lock-btn" type="button">[ ENTER ]</button>
+  <label id="match-limit-wrap">
+    MATCH GOAL
+    <select id="match-limit-select">
+      <option value="10">10 KILLS</option>
+      <option value="20">20 KILLS</option>
+    </select>
+  </label>
+  <div id="room-panel">
+    <div id="room-info">
+      <span id="room-code">ROOM PUBLIC</span>
+      <span id="room-status">WAITING · 10 KILLS</span>
+    </div>
+    <input id="room-input" maxlength="8" placeholder="ROOM CODE"/>
+    <button class="room-action" id="room-join-btn" type="button">JOIN</button>
+    <button class="room-action" id="room-create-btn" type="button">CREATE</button>
+    <button class="room-action" id="room-quick-btn" type="button">QUICK MATCH</button>
+  </div>
   <p style="font-size:11px;opacity:.35;letter-spacing:3px;margin-top:24px">
     WASD 이동 &nbsp;|&nbsp; SPACE 점프 &nbsp;|&nbsp; SHIFT 대시<br/><br/>
-    우클릭 조준 &nbsp;|&nbsp; R 재장전 &nbsp;|&nbsp; M 사격모드 &nbsp;|&nbsp; 휠 줌<br/><br/>
-    TAB 스코어보드
+    우클릭 조준 &nbsp;|&nbsp; R 기지 재장전 &nbsp;|&nbsp; M 사격모드 &nbsp;|&nbsp; 휠 줌<br/><br/>
+    1 M4A1 &nbsp;|&nbsp; 2 저격총 &nbsp;|&nbsp; 3 붕대 &nbsp;|&nbsp; 4 폭탄 &nbsp;|&nbsp; TAB 스코어보드
   </p>
 </div>
 

@@ -45,6 +45,14 @@ export class Player {
     this.fireMode      = 'AUTO';
     this.fireCooldown  = 0;
     this.fireRate      = 6;
+    this.weaponProfiles = {
+      rifle:  { slot: 1, name: 'M4A1',    ammo: 30, reserve: 120, maxAmmo: 30, maxReserve: 120, reload: 60, fireRate: 6, recoil: 0.3 },
+      sniper: { slot: 2, name: 'SNIPER',  ammo: 5,  reserve: 25,  maxAmmo: 5,  maxReserve: 25,  reload: 95, fireRate: 44, recoil: 0.85 },
+    };
+    this.weaponAmmo = {
+      rifle:  { ammo: 30, reserve: 120 },
+      sniper: { ammo: 5,  reserve: 25 },
+    };
     this.mKeyHeld      = false;
     this.mouseLeftHeld = false;
 
@@ -97,6 +105,7 @@ export class Player {
     this.isChargingGrenade = false;
     this._slot4Held   = false;
     this._slot1Held   = false;
+    this._slot2Held   = false;
     this._slot3Held   = false;
     this._slot2Held   = false;
     this._slot5Held   = false;
@@ -397,10 +406,13 @@ export class Player {
   // 사격
   // ─────────────────────────────────────────
   shoot(checkHitFn) {
+    this._syncWeaponStats();
     if (this.ammo <= 0 || this.isReloading) return;
+    const profile = this.getWeaponProfile();
     this.ammo--;
-    this.recoilOffset = 0.3;
-    this.recoilRoll   = (Math.random() * 6 - 3);
+    this._writeWeaponAmmo();
+    this.recoilOffset = profile.recoil;
+    this.recoilRoll   = (Math.random() * 6 - 3) * (profile.name === 'SNIPER' ? 1.8 : 1);
     if (checkHitFn)       checkHitFn();
     if (this.onShoot)     this.onShoot();
     if (this.onHudUpdate) this.onHudUpdate();
@@ -414,6 +426,11 @@ export class Player {
     this.sniperTotalAmmo = this.sniperMaxTotal;
     this.pistolAmmo   = this.pistolMaxAmmo;
     this.pistolTotalAmmo = this.pistolMaxTotal;
+    this.weaponAmmo.rifle.ammo     = this.weaponProfiles.rifle.maxAmmo;
+    this.weaponAmmo.rifle.reserve  = this.weaponProfiles.rifle.maxReserve;
+    this.weaponAmmo.sniper.ammo    = this.weaponProfiles.sniper.maxAmmo;
+    this.weaponAmmo.sniper.reserve = this.weaponProfiles.sniper.maxReserve;
+    this._syncWeaponStats();
     this.grenadeCount = this.maxGrenades;
     this.bandageCount = this.maxBandage;
     this.isReloading  = false;
@@ -423,6 +440,7 @@ export class Player {
   }
 
   startReload() {
+    if (!this.canUseBaseAction?.()) return;
     if (this.weaponSlot === 1 && this.ammo < this.maxAmmo && !this.isReloading && this.totalAmmo > 0) {
       this.isReloading = true;
       this.reloadTimer = this.reloadDuration;
@@ -465,15 +483,16 @@ export class Player {
     if (keys['KeyD']) { moveDir.addScaledVector(right,  1); targetTilt += 3; }
 
     // 무기 슬롯 전환
-    if (keys['Digit1'] && !this._slot1Held) { this.weaponSlot = 1; this._slot1Held = true; if (this.onHudUpdate) this.onHudUpdate(); }
+    if (keys['Digit1'] && !this._slot1Held && !this.isReloading) { this.weaponSlot = 1; this._slot1Held = true; if (this.onHudUpdate) this.onHudUpdate(); }
     if (!keys['Digit1']) this._slot1Held = false;
-    if (keys['Digit2'] && !this._slot2Held) { this.weaponSlot = 2; this._slot2Held = true; if (this.onHudUpdate) this.onHudUpdate(); }
+    const canSwitchWeapon = !this.isReloading && !this.sniperReloading && !this.pistolReloading;
+    if (keys['Digit2'] && !this._slot2Held && canSwitchWeapon) { this.weaponSlot = 2; this._slot2Held = true; if (this.onHudUpdate) this.onHudUpdate(); }
     if (!keys['Digit2']) this._slot2Held = false;
-    if (keys['Digit5'] && !this._slot5Held) { this.weaponSlot = 5; this._slot5Held = true; if (this.onHudUpdate) this.onHudUpdate(); }
+    if (keys['Digit5'] && !this._slot5Held && canSwitchWeapon) { this.weaponSlot = 5; this._slot5Held = true; if (this.onHudUpdate) this.onHudUpdate(); }
     if (!keys['Digit5']) this._slot5Held = false;
-    if (keys['Digit4'] && !this._slot4Held && this.grenadeCount > 0) { this.weaponSlot = 4; this._slot4Held = true; if (this.onHudUpdate) this.onHudUpdate(); }
+    if (keys['Digit4'] && !this._slot4Held && this.grenadeCount > 0 && canSwitchWeapon) { this.weaponSlot = 4; this._slot4Held = true; if (this.onHudUpdate) this.onHudUpdate(); }
     if (!keys['Digit4']) this._slot4Held = false;
-    if (keys['Digit3'] && !this._slot3Held && this.bandageCount > 0) { this.weaponSlot = 3; this._slot3Held = true; if (this.onHudUpdate) this.onHudUpdate(); }
+    if (keys['Digit3'] && !this._slot3Held && this.bandageCount > 0 && !this.isReloading) { this.weaponSlot = 3; this._slot3Held = true; if (this.onHudUpdate) this.onHudUpdate(); }
     if (!keys['Digit3']) this._slot3Held = false;
 
     // M키 사격모드 (M4A1 슬롯에서만, 저격/권총은 SEMI 고정)
@@ -501,10 +520,14 @@ export class Player {
     if (this.weaponSlot === 1) {
       // M4A1: AUTO/SEMI
       if (mouse.left) {
-        if (this.fireMode === 'AUTO') {
+        if (this.weaponSlot === 1 && this.fireMode === 'AUTO') {
           if (this.fireCooldown === 0) { this.shoot(checkHitFn); this.fireCooldown = this.fireRate; }
         } else {
-          if (!this.mouseLeftHeld) { this.shoot(checkHitFn); this.mouseLeftHeld = true; }
+          if (!this.mouseLeftHeld && this.fireCooldown === 0) {
+            this.shoot(checkHitFn);
+            this.fireCooldown = this.fireRate;
+            this.mouseLeftHeld = true;
+          }
         }
       } else { this.mouseLeftHeld = false; }
       this.isScopedIn = false; this.scopeProgress = 0;
@@ -592,7 +615,7 @@ export class Player {
 
     } else if (this.weaponSlot === 3) {
       // 붕대: 좌클릭 홀드 1.5초 → 30 HP 회복
-      if (mouse.left && this.bandageCount > 0 && this.health < this.maxHealth && !this.isBandaging) {
+      if (mouse.left && this.bandageCount > 0 && this.health < this.maxHealth && !this.isBandaging && this.canUseBaseAction?.()) {
         this.isBandaging  = true;
         this.bandageTimer = this.bandageDuration;
       }
@@ -674,6 +697,7 @@ export class Player {
         const fill   = Math.min(needed, this.totalAmmo);
         this.ammo      += fill;
         this.totalAmmo -= fill;
+        this._writeWeaponAmmo();
         if (this.onHudUpdate) this.onHudUpdate();
       }
     }
@@ -724,8 +748,11 @@ export class Player {
 
     // 사망/추락
     if (this.health <= 0 || this.pos.y <= -20) {
-      this.ammo         = this.maxAmmo;
-      this.totalAmmo    = this.maxTotalAmmo;
+      this.weaponAmmo.rifle.ammo     = this.weaponProfiles.rifle.maxAmmo;
+      this.weaponAmmo.rifle.reserve  = this.weaponProfiles.rifle.maxReserve;
+      this.weaponAmmo.sniper.ammo    = this.weaponProfiles.sniper.maxAmmo;
+      this.weaponAmmo.sniper.reserve = this.weaponProfiles.sniper.maxReserve;
+      this._syncWeaponStats();
       this.grenadeCount = this.maxGrenades;
       this.bandageCount = 0;          // 붕대는 죽으면 소멸
       this.isBandaging  = false;
@@ -880,5 +907,41 @@ export class Player {
       recoil:     this.recoilOffset,
       is_aiming:  this.isAiming,
     };
+  }
+
+  getWeaponKey() {
+    return this.weaponSlot === 2 ? 'sniper' : 'rifle';
+  }
+
+  getWeaponProfile() {
+    return this.weaponProfiles[this.getWeaponKey()];
+  }
+
+  _syncWeaponStats() {
+    const key = this.getWeaponKey();
+    const profile = this.weaponProfiles[key];
+    const store = this.weaponAmmo[key];
+    this.ammo = store.ammo;
+    this.totalAmmo = store.reserve;
+    this.maxAmmo = profile.maxAmmo;
+    this.maxTotalAmmo = profile.maxReserve;
+    this.reloadDuration = profile.reload;
+    this.fireRate = profile.fireRate;
+  }
+
+  _writeWeaponAmmo() {
+    const store = this.weaponAmmo[this.getWeaponKey()];
+    store.ammo = this.ammo;
+    store.reserve = this.totalAmmo;
+  }
+
+  applyKnockback(origin, force) {
+    const dir = this.pos.clone().sub(origin);
+    dir.y = Math.max(0.35, dir.y + 0.2);
+    if (dir.lengthSq() < 0.001) dir.set(0, 1, 0);
+    dir.normalize().multiplyScalar(force);
+    this.pos.addScaledVector(dir, 0.35);
+    this.yVel = Math.max(this.yVel, dir.y * 0.18);
+    this.isJumping = true;
   }
 }

@@ -405,10 +405,66 @@ export class Renderer {
       vel: new THREE.Vector3((Math.random()-0.5)*0.04, Math.random()*0.02+0.01, (Math.random()-0.5)*0.04) });
   }
 
+  spawnMuzzleFlash(position, front, strong = false) {
+    const group = new THREE.Group();
+    group.position.copy(position).addScaledVector(front, 0.7);
+    const flashMat = new THREE.MeshBasicMaterial({
+      color: strong ? 0xfff1a8 : 0xffd25a,
+      transparent: true,
+      opacity: 0.95,
+      depthWrite: false,
+    });
+    const flash = new THREE.Mesh(new THREE.SphereGeometry(strong ? 0.16 : 0.1, 8, 8), flashMat);
+    group.add(flash);
+    const streak = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.018, strong ? 0.07 : 0.045, strong ? 1.6 : 0.75, 8),
+      flashMat.clone()
+    );
+    streak.rotation.z = Math.PI / 2;
+    group.add(streak);
+    group.lookAt(position.clone().add(front));
+    this.scene.add(group);
+    this.particles.push({ mesh: group, life: strong ? 0.16 : 0.1, type: 'muzzle', baseSize: 1 });
+  }
+
+  spawnBulletImpact(position, headshot = false) {
+    const color = headshot ? 0xff3030 : 0xfff2c0;
+    for (let i = 0; i < (headshot ? 16 : 9); i++) {
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(0.035, 0.035, 0.08),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9 })
+      );
+      mesh.position.copy(position);
+      const vel = new THREE.Vector3(
+        (Math.random() - 0.5) * 0.22,
+        Math.random() * 0.16 + 0.03,
+        (Math.random() - 0.5) * 0.22
+      );
+      this.scene.add(mesh);
+      this.particles.push({ mesh, life: 0.55, type: 'spark', vel, baseSize: 1 });
+    }
+  }
+
   updateParticles(dt) {
     this.particles = this.particles.filter(p => {
       p.life -= dt * 1.2;
       if (p.life <= 0) { this.scene.remove(p.mesh); return false; }
+      if (p.type === 'muzzle') {
+        const s = Math.max(0.2, p.life * 8);
+        p.mesh.scale.setScalar(s);
+        p.mesh.traverse(child => {
+          if (child.material) child.material.opacity = Math.min(1, p.life * 8);
+        });
+        return true;
+      }
+      if (p.type === 'spark') {
+        p.vel.y -= 0.01;
+        p.mesh.position.add(p.vel);
+        p.mesh.rotation.x += 0.24;
+        p.mesh.rotation.z += 0.18;
+        p.mesh.material.opacity = Math.max(0, p.life * 1.8);
+        return true;
+      }
       p.vel.y += 0.0005; p.vel.multiplyScalar(0.93);
       p.mesh.position.add(p.vel);
       p.mesh.scale.setScalar((p.baseSize * (1+(1-p.life)*4)) / p.baseSize);

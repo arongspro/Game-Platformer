@@ -13,6 +13,7 @@ export class GrenadeSystem {
 
     // 콜백
     this.onExplode = null; // (position, radius, maxDamage) => void
+    this.getContactTargets = null;
   }
 
   // ── 수류탄 투척 ──
@@ -49,6 +50,7 @@ export class GrenadeSystem {
       vel:      dir.clone().multiplyScalar(speed),
       gravity:  GRENADE_GRAVITY,
       timer:    180,      // 3초 = 60fps × 3
+      age:      0,
       bounces:  0,
       maxBounce: 4,
       exploded: false,
@@ -110,12 +112,19 @@ export class GrenadeSystem {
       g.mesh.rotation.x += g.vel.length() * 0.5;
       g.mesh.rotation.z += g.vel.length() * 0.3;
 
+      g.age++;
+      if (g.age > 8 && this._touchesPlayer(g)) {
+        this._explode(g, { contact: true });
+        toRemove.push(g);
+        continue;
+      }
+
       // 타이머 감소
       g.timer--;
 
       // 타이머 만료 → 폭발
       if (g.timer <= 0) {
-        this._explode(g);
+        this._explode(g, { contact: false });
         toRemove.push(g);
       }
     }
@@ -132,16 +141,27 @@ export class GrenadeSystem {
   }
 
   // ── 폭발 ──
-  _explode(g) {
+  _explode(g, meta = {}) {
     g.exploded = true;
     const pos = g.mesh.position.clone();
     this.scene.remove(g.mesh);
 
     // 폭발 콜백 (main.js에서 피해 계산)
-    if (this.onExplode) this.onExplode(pos, 8.0, 80);
+    if (this.onExplode) this.onExplode(pos, 8.0, 80, meta);
 
     // 폭발 이펙트 생성
     this._spawnExplosion(pos);
+  }
+
+  _touchesPlayer(g) {
+    if (!this.getContactTargets) return false;
+    const targets = this.getContactTargets() || [];
+    for (const target of targets) {
+      const center = target.pos.clone();
+      center.y += target.height ? target.height * 0.5 : 0.9;
+      if (center.distanceTo(g.mesh.position) <= (target.radius || 0.48)) return true;
+    }
+    return false;
   }
 
   // ── 폭발 이펙트 ──

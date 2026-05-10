@@ -112,8 +112,9 @@ body {
   font-size: 42px;
   font-weight: 900;
   line-height: 1;
-  letter-spacing: -1px;
+  letter-spacing: 0;
 }
+#ammo-current.sniper-ammo { color: #ffcc00; text-shadow: 0 0 18px rgba(255,204,0,0.45); }
 #ammo-max {
   font-size: 14px;
   opacity: 0.4;
@@ -136,6 +137,7 @@ body {
   display: none;
 }
 #reload-bar.visible { display: block; }
+#reload-bar.blocked #reload-label { color: #ff6666; }
 #reload-label {
   text-align: center;
   font-size: 10px;
@@ -315,6 +317,21 @@ body {
   pointer-events: none;
   z-index: 20;
   background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+}
+
+body.hit-kick #canvas {
+  animation: hitKick 0.12s ease-out;
+}
+body.headshot-kick #canvas {
+  animation: headshotKick 0.18s ease-out;
+}
+@keyframes hitKick {
+  0% { filter: saturate(1.45) contrast(1.08); }
+  100% { filter: none; }
+}
+@keyframes headshotKick {
+  0% { filter: saturate(1.8) contrast(1.2) brightness(1.15); }
+  100% { filter: none; }
 }
 
 #bandage-bar {

@@ -82,9 +82,10 @@ export async function register(nickname, password, pixels) {
     pixels:   pixels,
     kills:    0,
     deaths:   0,
+    rating:   0,
     createdAt: Date.now(),
   });
-  return { nickname, pixels };
+  return { nickname, pixels, kills: 0, deaths: 0, rating: 0 };
 }
 
 // ── 로그인 ──
@@ -94,7 +95,13 @@ export async function login(nickname, password) {
   if (!snap.exists()) throw new Error('존재하지 않는 닉네임입니다.');
   const data = snap.val();
   if (data.password !== hashPassword(password)) throw new Error('비밀번호가 틀렸습니다.');
-  return { nickname, pixels: data.pixels, kills: data.kills||0, deaths: data.deaths||0 };
+  return {
+    nickname,
+    pixels: data.pixels,
+    kills: data.kills || 0,
+    deaths: data.deaths || 0,
+    rating: data.rating || 0,
+  };
 }
 
 // ── 킬/데스 업데이트 ──
