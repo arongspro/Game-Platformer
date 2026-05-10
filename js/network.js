@@ -1,5 +1,5 @@
 // network.js - Firebase Realtime Database 멀티플레이어
-// Firebase 규칙 호환: auth.uid 기반 경로, pos {x,y,z}, hits weapon 필드, users 일괄 update
+// 보안 경로(/players, /hits, /users)와 게임 데이터 경로(/rooms)를 분리
 
 import { initializeApp, getApps } from 'firebase/app';
 import { getDatabase, ref, set, onValue, remove, onDisconnect, get, child, update }
@@ -23,11 +23,8 @@ export class Network {
   constructor(userInfo) {
     this.db       = getDatabase(fireApp);
     this.auth     = getAuth(fireApp);
-
-    // auth.uid: Firebase 규칙 auth.uid === $uid 통과에 필수
-    // auth.js의 ensureAuth()가 먼저 호출된 후 Network가 생성되어야 함
     this.myUid    = userInfo.uid || this.auth.currentUser?.uid;
-    this.myId     = this.myUid;           // DB 경로 키로 uid 사용
+    this.myId     = this.myUid;
     this.nickname = userInfo.nickname;
     this.pixels   = userInfo.pixels;
 
@@ -62,48 +59,50 @@ export class Network {
     this._setupListeners();
   }
 
-  // ── pos 배열 → 규칙 호환 객체 변환 ──
-  // 규칙: pos.hasChildren(['x','y','z']) && pos/x, pos/y, pos/z isNumber()
+  // pos 배열 → {x,y,z} 객체 (규칙 호환)
   _posToObj(posArr) {
-    if (Array.isArray(posArr)) {
-      return { x: posArr[0] ?? 0, y: posArr[1] ?? 0, z: posArr[2] ?? 0 };
-    }
-    return posArr; // 이미 객체인 경우
+    if (Array.isArray(posArr)) return { x: posArr[0] ?? 0, y: posArr[1] ?? 0, z: posArr[2] ?? 0 };
+    return posArr;
   }
 
-  // pos 객체 → 배열 (renderer 등 기존 코드 호환)
+  // pos 객체 → 배열 (renderer 호환)
   _posToArr(posObj) {
+    if (!posObj) return [0, 0, 0];
     if (Array.isArray(posObj)) return posObj;
     return [posObj.x ?? 0, posObj.y ?? 0, posObj.z ?? 0];
   }
 
   _setupListeners() {
     this._clearListeners();
-    const playersPath = `rooms/${this.roomId}/players`;
-    const hitsPath    = `hits/${this.myUid}`;   // 규칙: hits/$victim_uid
-    const metaPath    = `rooms/${this.roomId}/meta`;
+
+    // ── 경로 정의 ──
+    // 보안 경로 (Firebase 규칙 적용)
+    const securePlayerPath = `players/${this.myUid}`;
+    // 게임 데이터 경로 (규칙 없음 - yaw/pitch/kills/pixels 등)
+    const statePath  = `rooms/${this.roomId}/state`;
+    const metaPath   = `rooms/${this.roomId}/meta`;
+    const hitsPath   = `hits/${this.myUid}`;
 
     this._ensureRoomMeta();
 
-    // 전체 플레이어 구독
-    this._unsubs.push(onValue(ref(this.db, playersPath), snapshot => {
+    // ── 플레이어 구독: state 경로에서 게임 데이터 수신 ──
+    this._unsubs.push(onValue(ref(this.db, statePath), snapshot => {
       const data = snapshot.val() || {};
       const others = {};
-      for (const [pid, info] of Object.entries(data)) {
-        if (pid === this.myUid) continue;
+      for (const [uid, info] of Object.entries(data)) {
+        if (uid === this.myUid) continue;
         if (info.ts && (Date.now() - info.ts > 3000)) continue;
-        // pos 객체를 배열로 변환해 기존 renderer 코드 호환
-        others[pid] = { ...info, pos: this._posToArr(info.pos) };
+        others[uid] = { ...info, pos: this._posToArr(info.pos) };
       }
       if (!this._targetHp) this._targetHp = {};
-      for (const [pid, info] of Object.entries(others)) {
-        if (info.health_reset) this._targetHp[pid] = 100;
+      for (const [uid, info] of Object.entries(others)) {
+        if (info.health_reset) this._targetHp[uid] = 100;
       }
       this.otherPlayers = others;
       if (this.onPlayersUpdate) this.onPlayersUpdate(others);
     }));
 
-    // 방 메타
+    // ── 방 메타 구독 ──
     this._unsubs.push(onValue(ref(this.db, metaPath), snapshot => {
       const meta = snapshot.val() || {};
       this.roomName   = meta.name   || this.roomName || this.roomId;
@@ -111,8 +110,8 @@ export class Network {
       this.roomStatus = meta.status || 'waiting';
       this.roomWinner = meta.winner || null;
       this.roomHost   = meta.host   || null;
-      localStorage.setItem('vp_room_id',    this.roomId);
-      localStorage.setItem('vp_room_name',  this.roomName);
+      localStorage.setItem('vp_room_id',     this.roomId);
+      localStorage.setItem('vp_room_name',   this.roomName);
       localStorage.setItem('vp_match_limit', String(this.matchLimit));
       if (this.onRoomUpdate) this.onRoomUpdate({
         id: this.roomId, name: this.roomName, limit: this.matchLimit,
@@ -120,21 +119,16 @@ export class Network {
       });
     }));
 
-    // 피격 이벤트 구독: hits/$myUid (규칙 호환 경로)
-    // 규칙: $victim_uid 본인만 읽기 → auth.uid === myUid 이므로 통과
+    // ── 피격 이벤트 구독: hits/$myUid ──
     const hitRef = ref(this.db, hitsPath);
     this._unsubs.push(onValue(hitRef, snapshot => {
       const data = snapshot.val();
       if (!data) return;
-
-      // hits 하위에 hit_id 키들이 있을 수 있음 (규칙: hits/$victim/$hit_id)
-      // 가장 최신 hit 하나씩 처리
       for (const [hitId, hitData] of Object.entries(data)) {
-        const hitTs = hitData.ts || 0;
         const hitItemRef = ref(this.db, `${hitsPath}/${hitId}`);
-        if (hitTs < this._respawnTime) { remove(hitItemRef); continue; }
-        if (Date.now() - this._respawnTime < this._invincibleDuration) { remove(hitItemRef); continue; }
-
+        const hitTs = hitData.ts || 0;
+        if (hitTs < this._respawnTime)                                    { remove(hitItemRef); continue; }
+        if (Date.now() - this._respawnTime < this._invincibleDuration)    { remove(hitItemRef); continue; }
         this.myHealth = Math.max(0, this.myHealth - (hitData.damage || 15));
         if (this.onHealthUpdate) this.onHealthUpdate(this.myHealth);
         if (this.onHit) this.onHit(hitData.damage || 15);
@@ -142,7 +136,9 @@ export class Network {
       }
     }));
 
-    onDisconnect(ref(this.db, `${playersPath}/${this.myUid}`)).remove();
+    // 접속 끊기면 두 경로 모두 삭제
+    onDisconnect(ref(this.db, securePlayerPath)).remove();
+    onDisconnect(ref(this.db, `${statePath}/${this.myUid}`)).remove();
   }
 
   _clearListeners() {
@@ -159,13 +155,9 @@ export class Network {
     const snap = await get(metaRef).catch(() => null);
     if (snap?.exists()) return;
     await set(metaRef, {
-      id:        this.roomId,
-      name:      this.roomName || this.roomId,
-      host:      this.myUid,
-      limit:     this.matchLimit,
-      status:    'waiting',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      id: this.roomId, name: this.roomName || this.roomId,
+      host: this.myUid, limit: this.matchLimit,
+      status: 'waiting', createdAt: Date.now(), updatedAt: Date.now(),
     }).catch(() => {});
   }
 
@@ -198,18 +190,18 @@ export class Network {
     this.matchLimit = Number(limit) === 20 ? 20 : 10;
     localStorage.setItem('vp_match_limit', String(this.matchLimit));
     await update(ref(this.db, `rooms/${this.roomId}/meta`), {
-      limit:  this.matchLimit,
+      limit: this.matchLimit,
       status: this.roomStatus === 'ended' ? 'waiting' : this.roomStatus,
-      winner: null,
-      updatedAt: Date.now(),
+      winner: null, updatedAt: Date.now(),
     }).catch(() => {});
   }
 
   async joinRoom(roomId, meta = null) {
     const nextRoom = String(roomId || '').trim().toUpperCase();
     if (!nextRoom) throw new Error('방 코드가 비어 있습니다.');
-    remove(ref(this.db, `rooms/${this.roomId}/players/${this.myUid}`)).catch(() => {});
-    remove(ref(this.db, `hits/${this.myUid}`)).catch(() => {});
+    // 이전 방 데이터 삭제
+    remove(ref(this.db, `players/${this.myUid}`)).catch(() => {});
+    remove(ref(this.db, `rooms/${this.roomId}/state/${this.myUid}`)).catch(() => {});
     this.roomId = nextRoom;
     if (meta) {
       this.roomName   = meta.name || nextRoom;
@@ -236,19 +228,24 @@ export class Network {
     this._setupListeners();
   }
 
-  // ── 위치 브로드캐스트 ──
-  // 규칙: players/$uid 에 pos {x,y,z}, nickname, ts 필수
+  // ── 위치 전송: 경로 2곳에 분리 저장 ──
   sendUpdate(snapshot) {
     const now = Date.now();
     if (now - this._lastSend < this._sendInterval) return;
     this._lastSend = now;
 
-    const rawPos = snapshot.pos;
-    const pos = this._posToObj(rawPos);  // 배열 → {x,y,z} 변환
+    const pos = this._posToObj(snapshot.pos);
 
-    set(ref(this.db, `rooms/${this.roomId}/players/${this.myUid}`), {
-      ...snapshot,
-      pos,                          // {x,y,z} 형식으로 덮어씀
+    // 1) 보안 경로: pos + nickname + ts 만 (규칙 준수)
+    set(ref(this.db, `players/${this.myUid}`), {
+      pos,
+      nickname: this.nickname,
+      ts:       now,
+    }).catch(() => {});
+
+    // 2) 게임 데이터 경로: 렌더링에 필요한 모든 데이터 (규칙 없음)
+    set(ref(this.db, `rooms/${this.roomId}/state/${this.myUid}`), {
+      pos,
       nickname:    this.nickname,
       pixels:      this.pixels,
       kills:       this.kills,
@@ -256,6 +253,13 @@ export class Network {
       totalKills:  this.totalKills,
       totalDeaths: this.totalDeaths,
       rating:      this.rating,
+      yaw:         snapshot.yaw,
+      pitch:       snapshot.pitch,
+      move_time:   snapshot.move_time,
+      bob_amp:     snapshot.bob_amp,
+      is_sliding:  snapshot.is_sliding,
+      recoil:      snapshot.recoil,
+      is_aiming:   snapshot.is_aiming,
       ts:          now,
     }).catch(() => {});
 
@@ -265,21 +269,14 @@ export class Network {
     }).catch(() => {});
   }
 
-  // ── 피격 전송 ──
-  // 규칙: hits/$victim_uid/$hit_id 형식
-  //       hit_id: /^[a-zA-Z0-9]+_[0-9]+$/
-  //       weapon 필드 필수 (rifle|sniper|pistol)
-  //       from: auth.uid, 자기 자신 공격 불가
+  // ── 피격 전송: hits/$victim/$hitId (규칙 준수) ──
   sendHit(targetUid, damage = 15, weaponType = 'rifle') {
     if (!this._targetHp) this._targetHp = {};
     if (this._targetHp[targetUid] === undefined) this._targetHp[targetUid] = 100;
     this._targetHp[targetUid] = Math.max(0, this._targetHp[targetUid] - damage);
 
-    // 무기 화이트리스트 정규화
     const weapon = ['rifle', 'sniper', 'pistol'].includes(weaponType) ? weaponType : 'rifle';
-
-    // hit_id: {uid일부}_{timestamp} 형식
-    const hitId = `${this.myUid.slice(0, 8)}_${Date.now()}`;
+    const hitId  = `${this.myUid.slice(0, 8)}_${Date.now()}`;
 
     set(ref(this.db, `hits/${targetUid}/${hitId}`), {
       damage,
@@ -298,13 +295,11 @@ export class Network {
     this.kills++;
     this.totalKills++;
     this.rating += 25;
-
-    // 규칙: kills, deaths 동시에 update (따로 set 하면 validate 실패)
+    // kills + deaths 동시 update (규칙: 두 필드 함께 있어야 validate 통과)
     await update(ref(this.db, `users/${this.nickname}`), {
       kills:  this.totalKills,
       deaths: this.totalDeaths,
     }).catch(() => {});
-
     if (this.kills >= this.matchLimit) {
       update(ref(this.db, `rooms/${this.roomId}/meta`), {
         status: 'ended', winner: this.myUid,
@@ -322,7 +317,6 @@ export class Network {
     this.totalDeaths++;
     this.rating = Math.max(0, this.rating - 10);
 
-    // kills, deaths 함께 update (규칙: 두 필드 동시에 있어야 validate 통과)
     update(ref(this.db, `users/${this.nickname}`), {
       kills:  this.totalKills,
       deaths: this.totalDeaths,
@@ -331,7 +325,14 @@ export class Network {
     remove(ref(this.db, `hits/${this.myUid}`)).catch(() => {});
 
     const pos = this._posToObj(posArr);
-    set(ref(this.db, `rooms/${this.roomId}/players/${this.myUid}`), {
+
+    // 보안 경로 업데이트
+    set(ref(this.db, `players/${this.myUid}`), {
+      pos, nickname: this.nickname, ts: now,
+    }).catch(() => {});
+
+    // 게임 데이터 경로 업데이트
+    set(ref(this.db, `rooms/${this.roomId}/state/${this.myUid}`), {
       pos,
       nickname:     this.nickname,
       pixels:       this.pixels,
@@ -346,7 +347,8 @@ export class Network {
   }
 
   disconnect() {
-    remove(ref(this.db, `rooms/${this.roomId}/players/${this.myUid}`)).catch(() => {});
+    remove(ref(this.db, `players/${this.myUid}`)).catch(() => {});
+    remove(ref(this.db, `rooms/${this.roomId}/state/${this.myUid}`)).catch(() => {});
     this._clearListeners();
   }
 
