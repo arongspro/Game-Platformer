@@ -28,6 +28,10 @@ export class Network {
     this.nickname = userInfo.nickname;
     this.pixels   = userInfo.pixels;
 
+    if (!this.myUid) {
+      console.error('[Network] UID 없음 - 인증이 완료되지 않았습니다.');
+    }
+
     this.otherPlayers = {};
     this.myHealth     = 100;
     this.roomId       = (localStorage.getItem('vp_room_id') || 'PUBLIC').toUpperCase();
@@ -82,6 +86,9 @@ export class Network {
     const statePath  = `rooms/${this.roomId}/state`;
     const metaPath   = `rooms/${this.roomId}/meta`;
     const hitsPath   = `hits/${this.myUid}`;
+    const chatPath   = `rooms/${this.roomId}/chat`;
+
+    this._chatSince = Date.now() - 100; // 방 입장 시점 이후 메시지만
 
     this._ensureRoomMeta();
 
@@ -91,7 +98,8 @@ export class Network {
       const others = {};
       for (const [uid, info] of Object.entries(data)) {
         if (uid === this.myUid) continue;
-        if (info.ts && (Date.now() - info.ts > 3000)) continue;
+        // 타임스탬프 없는 데이터도 허용 (ts 없으면 통과), 10초로 여유 확장
+        if (info.ts && (Date.now() - info.ts > 10000)) continue;
         others[uid] = { ...info, pos: this._posToArr(info.pos) };
       }
       if (!this._targetHp) this._targetHp = {};
@@ -99,6 +107,7 @@ export class Network {
         if (info.health_reset) this._targetHp[uid] = 100;
       }
       this.otherPlayers = others;
+      console.log(`[Network] 플레이어 수신: ${Object.keys(others).length}명`, Object.keys(others));
       if (this.onPlayersUpdate) this.onPlayersUpdate(others);
     }));
 
@@ -139,6 +148,26 @@ export class Network {
     // 접속 끊기면 두 경로 모두 삭제
     onDisconnect(ref(this.db, securePlayerPath)).remove();
     onDisconnect(ref(this.db, `${statePath}/${this.myUid}`)).remove();
+
+    // ── 채팅 구독 (방 입장 시점 이후 메시지만) ──
+    this._unsubs.push(onValue(ref(this.db, chatPath), snapshot => {
+      if (!this.onChat) return;
+      const data = snapshot.val() || {};
+      Object.values(data)
+        .filter(m => m && m.ts > this._chatSince)
+        .sort((a, b) => a.ts - b.ts)
+        .forEach(m => {
+          this._chatSince = Math.max(this._chatSince, m.ts); // 다음엔 이 이후만
+          this.onChat(m);
+        });
+      // 50개 초과 시 오래된 것 정리
+      const keys = Object.keys(data).sort();
+      if (keys.length > 50) {
+        keys.slice(0, keys.length - 50).forEach(k =>
+          remove(ref(this.db, `${chatPath}/${k}`)).catch(() => {})
+        );
+      }
+    }));
   }
 
   _clearListeners() {
@@ -230,6 +259,10 @@ export class Network {
 
   // ── 위치 전송: 경로 2곳에 분리 저장 ──
   sendUpdate(snapshot) {
+    if (!this.myUid) {
+      console.warn('[Network] sendUpdate 스킵: myUid 없음');
+      return;
+    }
     const now = Date.now();
     if (now - this._lastSend < this._sendInterval) return;
     this._lastSend = now;
@@ -359,5 +392,20 @@ export class Network {
   getPlayerCount() {
     return Object.keys(this.otherPlayers).length + 1;
   }
+
+  // ── 채팅 ──
+  sendChat(text) {
+    if (!text || !this.myUid) return;
+    const msgId = `${this.myUid.slice(0, 8)}_${Date.now()}`;
+    set(ref(this.db, `rooms/${this.roomId}/chat/${msgId}`), {
+      uid:      this.myUid,
+      nickname: this.nickname,
+      text:     text.slice(0, 80),
+      ts:       Date.now(),
+    }).catch(() => {});
+  }
+
+  listenChat(callback) {
+    this.onChat = callback;
+  }
 }
-//수정후
