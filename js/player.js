@@ -495,7 +495,7 @@ export class Player {
   }
 
   startReload() {
-    if (!this.canUseBaseAction?.()) return;
+    // 재장전은 점프/이동 중에도 가능 (canUseBaseAction은 붕대 전용)
     if (this.weaponSlot === 1 || this.weaponSlot === 2 || this.weaponSlot === 5) {
       const weapon = this.getLoadoutWeapon();
       const state = this.weaponStates[weapon.id];
@@ -524,21 +524,23 @@ export class Player {
   // ─────────────────────────────────────────
   // 메인 업데이트
   // ─────────────────────────────────────────
-  update(camCtrl, checkHitFn) {
+  update(camCtrl, checkHitFn, dt = 1/60) {
+    // 60fps 기준으로 정규화된 스케일 (FPS 독립적 물리)
+    const scale = dt * 60;
     const keys = this.keys, mouse = this.mouse;
 
     // ADS
     this.isAiming    = mouse.right && !this.isReloading;
-    this.adsProgress += (this.isAiming ? 1 : -1) * 0.1;
+    this.adsProgress += (this.isAiming ? 1 : -1) * 0.1 * scale;
     this.adsProgress  = Math.max(0, Math.min(1, this.adsProgress));
 
     // 반동 감쇠
-    this.recoilOffset = Math.max(0, this.recoilOffset - 0.05);
+    this.recoilOffset = Math.max(0, this.recoilOffset - 0.05 * scale);
     if (camCtrl) {
       camCtrl.yaw += this.recoilYaw;
       camCtrl.pitch = Math.max(-89, Math.min(89, camCtrl.pitch + this.recoilPitch));
-      this.recoilYaw *= 0.58;
-      this.recoilPitch *= 0.52;
+      this.recoilYaw   *= Math.pow(0.58, scale);
+      this.recoilPitch *= Math.pow(0.52, scale);
     }
 
     // 이동 방향
@@ -579,11 +581,11 @@ export class Player {
     }
 
     // ── 슬롯별 좌클릭 동작 ──
-    this.fireCooldown = Math.max(0, this.fireCooldown - 1);
-    this.pistolFireCd = Math.max(0, this.pistolFireCd - 1);
-    this.sniperFireCd = Math.max(0, this.sniperFireCd - 1);
+    this.fireCooldown = Math.max(0, this.fireCooldown - scale);
+    this.pistolFireCd = Math.max(0, this.pistolFireCd - scale);
+    this.sniperFireCd = Math.max(0, this.sniperFireCd - scale);
     for (const state of Object.values(this.weaponStates)) {
-      state.cooldown = Math.max(0, state.cooldown - 1);
+      state.cooldown = Math.max(0, state.cooldown - scale);
     }
 
     // 저격총 우클릭 시 자동 1인칭 전환
@@ -693,24 +695,25 @@ export class Player {
 
     // Roll
     this.targetRoll   = targetTilt;
-    this.currentRoll += (this.targetRoll + this.recoilRoll - this.currentRoll) * 0.15;
-    this.recoilRoll  *= 0.8;
+    this.currentRoll += (this.targetRoll + this.recoilRoll - this.currentRoll) * 0.15 * scale;
+    this.recoilRoll  *= Math.pow(0.8, scale);
 
     const isMoving = moveDir.length() > 0;
     if (isMoving) moveDir.normalize();
 
     // 워킹 밥
     if (isMoving && !this.isJumping && !this.isSliding) {
-      this.moveTime += this.baseSpeed * 2.25;
-      this.bobAmp   += (1 - this.bobAmp) * 0.1;
+      this.moveTime += this.baseSpeed * 2.25 * scale;
+      this.bobAmp   += (1 - this.bobAmp) * 0.1 * scale;
     } else {
-      this.bobAmp += (0 - this.bobAmp) * 0.1;
+      this.bobAmp += (0 - this.bobAmp) * 0.1 * scale;
     }
 
     // 대시 쿨다운
     if (this.dashCooldown > 0) {
-      this.dashCooldown--;
-      if (this.dashCooldown % 30 === 0 && this.onHudUpdate) this.onHudUpdate();
+      this.dashCooldown -= scale;
+      if (this.dashCooldown < 0) this.dashCooldown = 0;
+      if (this.onHudUpdate) this.onHudUpdate();
     }
 
     // 슬라이드 시작
@@ -733,11 +736,11 @@ export class Player {
 
     let actualMove = new THREE.Vector3();
     if (this.isSliding) {
-      actualMove.copy(this.slideDir).multiplyScalar(this.slideSpeed);
-      this.slideSpeed -= 0.045;   // 빠르게 감속 (짧게)
+      actualMove.copy(this.slideDir).multiplyScalar(this.slideSpeed * scale);
+      this.slideSpeed -= 0.045 * scale;   // dt 기반 감속
       if (this.slideSpeed <= this.baseSpeed) this.isSliding = false;
     } else {
-      if (isMoving) actualMove.copy(moveDir).multiplyScalar(this.baseSpeed + this.speedBoost);
+      if (isMoving) actualMove.copy(moveDir).multiplyScalar((this.baseSpeed + this.speedBoost) * scale);
     }
 
     // 충돌 이동
@@ -749,10 +752,10 @@ export class Player {
     }
 
     // 중력
-    this.yVel += this.gravity;
-    if (this.speedBoost > 0) this.speedBoost *= 0.94;
-    this.padCooldown = Math.max(0, this.padCooldown - 1);
-    const tryY = this.pos.clone(); tryY.y += this.yVel;
+    this.yVel += this.gravity * scale;
+    if (this.speedBoost > 0) this.speedBoost *= Math.pow(0.94, scale);
+    this.padCooldown = Math.max(0, this.padCooldown - scale);
+    const tryY = this.pos.clone(); tryY.y += this.yVel * scale;
     if (!this.checkCollision(tryY)) {
       this.pos.y = tryY.y;
     } else {
@@ -764,7 +767,7 @@ export class Player {
 
     // 리로드
     if (this.isReloading) {
-      this.reloadTimer--;
+      this.reloadTimer -= scale;
       if (this.reloadTimer <= 0) {
         this.isReloading = false;
         const needed = this.maxAmmo - this.ammo;
@@ -778,7 +781,7 @@ export class Player {
 
     // 저격총 리로드
     if (this.sniperReloading) {
-      this.sniperReloadTimer--;
+      this.sniperReloadTimer -= scale;
       if (this.sniperReloadTimer <= 0) {
         this.sniperReloading = false;
         const needed = this.sniperMaxAmmo - this.sniperAmmo;
@@ -791,7 +794,7 @@ export class Player {
 
     // 권총 리로드
     if (this.pistolReloading) {
-      this.pistolReloadTimer--;
+      this.pistolReloadTimer -= scale;
       if (this.pistolReloadTimer <= 0) {
         this.pistolReloading = false;
         const needed = this.pistolMaxAmmo - this.pistolAmmo;
@@ -805,7 +808,7 @@ export class Player {
     for (const [weaponId, state] of Object.entries(this.weaponStates)) {
       if (!state.reloading) continue;
       const weapon = getWeaponById(weaponId);
-      state.reloadTimer--;
+      state.reloadTimer -= scale;
       if (state.reloadTimer <= 0) {
         state.reloading = false;
         const needed = weapon.maxAmmo - state.ammo;
@@ -818,7 +821,7 @@ export class Player {
 
     // 붕대 사용 타이머
     if (this.isBandaging) {
-      this.bandageTimer--;
+      this.bandageTimer -= scale;
       if (this.bandageTimer <= 0) {
         this.isBandaging  = false;
         this.health       = Math.min(this.maxHealth, this.health + 30);
