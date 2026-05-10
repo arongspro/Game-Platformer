@@ -194,6 +194,10 @@
   <div id="hitmarker"></div>
   <div id="ads-vignette"></div>
   <div id="damage-flash"></div>
+  <!-- 저격 스코프 오버레이 -->
+  <div id="sniper-scope" style="display:none; position:fixed; inset:0; pointer-events:none; z-index:90;">
+    <canvas id="scope-canvas" style="width:100%;height:100%;"></canvas>
+  </div>
   <div id="player-count">PLAYERS: 1</div>
   <div id="killfeed"></div>
 
@@ -239,6 +243,18 @@
     <span class="slot-key">1</span>
     <span class="weapon-icon">🔫</span>
     <span class="slot-name">M4A1</span>
+  </div>
+  <div class="weapon-slot" id="slot-2">
+    <span class="slot-key">2</span>
+    <span class="weapon-icon">🎯</span>
+    <span class="slot-name">SNIPER</span>
+    <span class="slot-count" id="sniper-count-ui">×5</span>
+  </div>
+  <div class="weapon-slot" id="slot-5">
+    <span class="slot-key">5</span>
+    <span class="weapon-icon">🔘</span>
+    <span class="slot-name">PISTOL</span>
+    <span class="slot-count" id="pistol-count-ui">×12</span>
   </div>
   <div class="weapon-slot" id="slot-4">
     <span class="slot-key">4</span>
