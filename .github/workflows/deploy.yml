@@ -11,18 +11,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Inject Secrets into network.js
+      - name: Replace Secrets
+        # node 명령어를 사용해 network.js 파일 내부의 텍스트를 확실하게 교체합니다.
         run: |
-          # network.js 파일 내의 __VITE_...__ 문자열을 GitHub Secrets 값으로 치환합니다.
-          # 파일 경로가 src/network.js 라면 아래 경로를 수정하세요.
-          sed -i "s|__VITE_FB_API_KEY__|${{ secrets.VITE_FB_API_KEY }}|g" network.js
-          sed -i "s|__VITE_FB_AUTH_DOMAIN__|${{ secrets.VITE_FB_AUTH_DOMAIN }}|g" network.js
-          sed -i "s|__VITE_FB_DATABASE_URL__|${{ secrets.VITE_FB_DATABASE_URL }}|g" network.js
-          sed -i "s|__VITE_FB_PROJECT_ID__|${{ secrets.VITE_FB_PROJECT_ID }}|g" network.js
-          sed -i "s|__VITE_FB_STORAGE_BUCKET__|${{ secrets.VITE_FB_STORAGE_BUCKET }}|g" network.js
-          sed -i "s|__VITE_FB_MESSAGING_SENDER_ID__|${{ secrets.VITE_FB_MESSAGING_SENDER_ID }}|g" network.js
-          sed -i "s|__VITE_FB_APP_ID__|${{ secrets.VITE_FB_APP_ID }}|g" network.js
-          sed -i "s|__VITE_FB_MEASUREMENT_ID__|${{ secrets.VITE_FB_MEASUREMENT_ID }}|g" network.js
+          node -e "
+          const fs = require('fs');
+          const file = 'network.js'; // 만약 src 폴더 안에 있다면 'src/network.js'로 수정!
+          let content = fs.readFileSync(file, 'utf8');
+          content = content.replace('__VITE_FB_API_KEY__', '${{ secrets.VITE_FB_API_KEY }}');
+          content = content.replace('__VITE_FB_AUTH_DOMAIN__', '${{ secrets.VITE_FB_AUTH_DOMAIN }}');
+          content = content.replace('__VITE_FB_DATABASE_URL__', '${{ secrets.VITE_FB_DATABASE_URL }}');
+          content = content.replace('__VITE_FB_PROJECT_ID__', '${{ secrets.VITE_FB_PROJECT_ID }}');
+          content = content.replace('__VITE_FB_STORAGE_BUCKET__', '${{ secrets.VITE_FB_STORAGE_BUCKET }}');
+          content = content.replace('__VITE_FB_MESSAGING_SENDER_ID__', '${{ secrets.VITE_FB_MESSAGING_SENDER_ID }}');
+          content = content.replace('__VITE_FB_APP_ID__', '${{ secrets.VITE_FB_APP_ID }}');
+          content = content.replace('__VITE_FB_MEASUREMENT_ID__', '${{ secrets.VITE_FB_MEASUREMENT_ID }}');
+          fs.writeFileSync(file, content);
+          "
 
       - name: Install and Build
         run: |
