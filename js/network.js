@@ -5,27 +5,15 @@ import { getDatabase, ref, set, onValue, remove, onDisconnect, get, child }
   from 'firebase/database';
 
 const FIREBASE_CONFIG = {
-  apiKey:            "__VITE_FB_API_KEY__",
-  authDomain:        "__VITE_FB_AUTH_DOMAIN__",
-  databaseURL:       "__VITE_FB_DATABASE_URL__",
-  projectId:         "__VITE_FB_PROJECT_ID__",
-  storageBucket:     "__VITE_FB_STORAGE_BUCKET__",
-  messagingSenderId: "__VITE_FB_MESSAGING_SENDER_ID__",
-  appId:             "__VITE_FB_APP_ID__",
-  measurementId:     "__VITE_FB_MEASUREMENT_ID__"
+  apiKey:            "AIzaSyCHXYjHr67AHEj6cfUUn5jxGfKa3c5adYE",
+  authDomain:        "multiplatformer-6db0f.firebaseapp.com",
+  databaseURL:       "https://multiplatformer-6db0f-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId:         "multiplatformer-6db0f",
+  storageBucket:     "multiplatformer-6db0f.firebasestorage.app",
+  messagingSenderId: "74962223394",
+  appId:             "1:74962223394:web:e4ab2a77d480a19474e57b",
+  measurementId:     "G-VDQ9ESN8L5"
 };
-
-// 배포 시 GitHub Actions가 위 플레이스홀더를 실제 값으로 치환합니다
-if (FIREBASE_CONFIG.apiKey.startsWith('__')) {
-  // 치환 실패 → 앱 실행 중단 (Firebase Fatal Error 방지)
-  document.body.innerHTML = `
-    <div style="color:#ff4444;font-family:monospace;padding:40px;background:#111;height:100vh;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:16px">
-      <div style="font-size:2rem">⚠️ 배포 설정 오류</div>
-      <div>Firebase 환경 변수가 주입되지 않았습니다.</div>
-      <div style="color:#888;font-size:0.85rem">GitHub Actions → Inject Secrets 스텝 로그를 확인하세요.</div>
-    </div>`;
-  throw new Error('Firebase 환경 변수 미주입 — 앱 실행 중단');
-}
 
 const fireApp = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
 
