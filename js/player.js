@@ -828,7 +828,7 @@ export class Player {
     // ── 권총 슬롯 ──
     if (this.weaponSlot === 5) {
       let grp = this._fpPistolGroup || this._fpWeaponGroup;
-      const isAimingP = mouse ? this.mouse.right : false;
+      const isAimingP = this.mouse.right;
       const pAds = this.adsProgress;
       const px = hipX + (adsX - hipX) * pAds + bobX;
       const py = hipY + (adsY - hipY) * pAds + recoilY + bobY;
