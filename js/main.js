@@ -35,6 +35,7 @@ const grenadeChargeEl   = document.getElementById('grenade-charge');
 const grenadeChargeFill = document.getElementById('grenade-charge-fill');
 const slot1El           = document.getElementById('slot-1');
 const slot4El           = document.getElementById('slot-4');
+const grenadeCountUI    = document.getElementById('grenade-count-ui');
 
 // 닉네임 표시
 myNickEl.textContent = userInfo.nickname;
@@ -45,10 +46,11 @@ const camCtrl  = new CameraController(renderer.camera);
 const player   = new Player(renderer.getBoxes(), renderer);
 const network  = new Network(userInfo);
 
-// 로컬 플레이어 픽셀 캐릭터 적용 (OBJ 로드 후 바디 준비되면)
+// 로컬 플레이어 픽셀 캐릭터 적용
 setTimeout(() => {
   if (userInfo.pixels) player.applyPixels(userInfo.pixels);
 }, 500);
+
 const remoteMeshes = {};
 const clock = new THREE.Clock();
 
@@ -262,6 +264,35 @@ player.onDie = () => {
   updateHud();
 };
 
+// ── 수류탄 폭발 콜백 (직접 연결, setTimeout 없음) ──
+player.grenadeSystem.onExplode = (pos, radius, maxDamage) => {
+  // 내 위치 기준 화면 흔들림
+  const myDist = player.pos.distanceTo(pos);
+  if (myDist < radius * 1.5) {
+    dmgFlash.classList.add('active');
+    setTimeout(() => dmgFlash.classList.remove('active'), myDist < 3 ? 400 : 150);
+  }
+
+  // 다른 플레이어 피해
+  for (const [pid, info] of Object.entries(network.otherPlayers)) {
+    if (!info?.pos) continue;
+    const tPos = new THREE.Vector3(info.pos[0], info.pos[1] + 0.9, info.pos[2]);
+    const dist = tPos.distanceTo(pos);
+    if (dist < radius) {
+      const falloff = Math.max(0, 1 - (dist / radius));
+      const dmg = Math.round(maxDamage * falloff * falloff);
+      if (dmg > 0) {
+        network.sendHit(pid, dmg);
+        showHitmarker(false);
+        const targetNick = info.nickname || pid.slice(-4);
+        addKillfeed(`💣 GRENADE ${dmg} → ${targetNick}`);
+      }
+    }
+  }
+  addKillfeed('💥 EXPLOSION!');
+  updateHud();
+};
+
 network.onPlayersUpdate = (others) => {
   for (const pid of Object.keys(remoteMeshes)) {
     if (!others[pid]) renderer.removeRemotePlayer(pid, remoteMeshes);
@@ -321,7 +352,7 @@ function loop() {
     if (slot1El && slot4El) {
       slot1El.classList.toggle('active', player.weaponSlot === 1);
       slot4El.classList.toggle('active', player.weaponSlot === 4);
-      slot4El.textContent = `[ 4 ] GRENADE ×${player.grenadeCount}`;
+      if (grenadeCountUI) grenadeCountUI.textContent = `×${player.grenadeCount}`;
     }
   }
 
