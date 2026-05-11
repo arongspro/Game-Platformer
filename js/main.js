@@ -738,7 +738,6 @@ chatInputEl.addEventListener('keydown', e => {
 network.listenChat(addChatMessage);
 
 // ── 메인 루프 ──
-// ── 메인 루프 ──
 function loop() {
   requestAnimationFrame(loop);
   const dt = Math.min(clock.getDelta(), 0.05);
@@ -808,75 +807,76 @@ function loop() {
     crate.group.rotation.y += 0.008;
   }
 
-  // ── 수류탄 충전바 / 슬롯 UI ──
-  if (player.weaponSlot === 4 && player.isChargingGrenade) {
-    grenadeChargeEl.classList.add('visible');
-    const pct = (player.grenadeCharge / player.grenadeMaxCharge) * 100;
-    grenadeChargeFill.style.width = pct + '%';
-  } else {
-    grenadeChargeEl.classList.remove('visible');
-  }
-  // 슬롯 하이라이트
-  if (slot1El && slot4El && slot3El) {
-    slot1El.classList.toggle('active', player.weaponSlot === 1);
-    slot2El && slot2El.classList.toggle('active', player.weaponSlot === 2);
-    slot5El && slot5El.classList.toggle('active', player.weaponSlot === 5);
-    slot4El.classList.toggle('active', player.weaponSlot === 4);
-    slot3El.classList.toggle('active', player.weaponSlot === 3);
-    if (grenadeCountUI) grenadeCountUI.textContent = `×${player.grenadeCount}`;
-    if (bandageCountUI) bandageCountUI.textContent = `×${player.bandageCount}`;
-    if (sniperCountUI)  sniperCountUI.textContent  = player.getLoadoutWeapon(2).icon;
-    if (pistolCountUI)  pistolCountUI.textContent  = player.getLoadoutWeapon(5).icon;
-  }
-
-  // ── 저격 스코프 오버레이 ──
-  const scopeOn = player.getLoadoutWeapon().scope && player.scopeProgress > 0.05;
-  sniperScopeEl.style.display = scopeOn ? 'block' : 'none';
-  if (scopeOn) {
-    const W = window.innerWidth, H = window.innerHeight;
-    if (scopeCanvas.width !== W || scopeCanvas.height !== H) {
-      scopeCanvas.width = W; scopeCanvas.height = H;
+    // ── 수류탄 충전바 / 슬롯 UI ──
+    if (player.weaponSlot === 4 && player.isChargingGrenade) {
+      grenadeChargeEl.classList.add('visible');
+      const pct = (player.grenadeCharge / player.grenadeMaxCharge) * 100;
+      grenadeChargeFill.style.width = pct + '%';
+    } else {
+      grenadeChargeEl.classList.remove('visible');
     }
-    const ctx2 = scopeCanvas.getContext('2d');
-    ctx2.clearRect(0,0,W,H);
-    const alpha = player.scopeProgress;
-    const cx = W/2, cy = H/2;
-    const r  = Math.min(W,H) * 0.32 * alpha;
-    // 검은 테두리 (비네트)
-    ctx2.fillStyle = `rgba(0,0,0,${0.92 * alpha})`;
-    ctx2.fillRect(0,0,W,H);
-    // 스코프 원형 투명 영역
-    ctx2.save();
-    ctx2.globalCompositeOperation = 'destination-out';
-    ctx2.beginPath();
-    ctx2.arc(cx, cy, r, 0, Math.PI*2);
-    ctx2.fillStyle = 'rgba(0,0,0,1)';
-    ctx2.fill();
-    ctx2.restore();
-    // 십자선
-    ctx2.strokeStyle = `rgba(0,255,100,${0.8*alpha})`;
-    ctx2.lineWidth = 1.5;
-    ctx2.beginPath();
-    ctx2.moveTo(cx - r*0.9, cy); ctx2.lineTo(cx - r*0.15, cy);
-    ctx2.moveTo(cx + r*0.15, cy); ctx2.lineTo(cx + r*0.9, cy);
-    ctx2.moveTo(cx, cy - r*0.9); ctx2.lineTo(cx, cy - r*0.15);
-    ctx2.moveTo(cx, cy + r*0.15); ctx2.lineTo(cx, cy + r*0.9);
-    ctx2.stroke();
-    // 중심점
-    ctx2.beginPath();
-    ctx2.arc(cx, cy, 2, 0, Math.PI*2);
-    ctx2.fillStyle = `rgba(0,255,100,${alpha})`;
-    ctx2.fill();
-    // 스코프 원 테두리
-    ctx2.strokeStyle = `rgba(40,40,40,${alpha})`;
-    ctx2.lineWidth = 3;
-    ctx2.beginPath();
-    ctx2.arc(cx, cy, r, 0, Math.PI*2);
-    ctx2.stroke();
+    // 슬롯 하이라이트
+    if (slot1El && slot4El && slot3El) {
+      slot1El.classList.toggle('active', player.weaponSlot === 1);
+      slot2El && slot2El.classList.toggle('active', player.weaponSlot === 2);
+      slot5El && slot5El.classList.toggle('active', player.weaponSlot === 5);
+      slot4El.classList.toggle('active', player.weaponSlot === 4);
+      slot3El.classList.toggle('active', player.weaponSlot === 3);
+      if (grenadeCountUI) grenadeCountUI.textContent = `×${player.grenadeCount}`;
+      if (bandageCountUI) bandageCountUI.textContent = `×${player.bandageCount}`;
+      if (sniperCountUI)  sniperCountUI.textContent  = player.getLoadoutWeapon(2).icon;
+      if (pistolCountUI)  pistolCountUI.textContent  = player.getLoadoutWeapon(5).icon;
+    }
+
+    // ── 저격 스코프 오버레이 ──
+    const scopeOn = player.getLoadoutWeapon().scope && player.scopeProgress > 0.05;
+    sniperScopeEl.style.display = scopeOn ? 'block' : 'none';
+    if (scopeOn) {
+      const W = window.innerWidth, H = window.innerHeight;
+      if (scopeCanvas.width !== W || scopeCanvas.height !== H) {
+        scopeCanvas.width = W; scopeCanvas.height = H;
+      }
+      const ctx2 = scopeCanvas.getContext('2d');
+      ctx2.clearRect(0,0,W,H);
+      const alpha = player.scopeProgress;
+      const cx = W/2, cy = H/2;
+      const r  = Math.min(W,H) * 0.32 * alpha;
+      // 검은 테두리 (비네트)
+      ctx2.fillStyle = `rgba(0,0,0,${0.92 * alpha})`;
+      ctx2.fillRect(0,0,W,H);
+      // 스코프 원형 투명 영역
+      ctx2.save();
+      ctx2.globalCompositeOperation = 'destination-out';
+      ctx2.beginPath();
+      ctx2.arc(cx, cy, r, 0, Math.PI*2);
+      ctx2.fillStyle = 'rgba(0,0,0,1)';
+      ctx2.fill();
+      ctx2.restore();
+      // 십자선
+      ctx2.strokeStyle = `rgba(0,255,100,${0.8*alpha})`;
+      ctx2.lineWidth = 1.5;
+      ctx2.beginPath();
+      ctx2.moveTo(cx - r*0.9, cy); ctx2.lineTo(cx - r*0.15, cy);
+      ctx2.moveTo(cx + r*0.15, cy); ctx2.lineTo(cx + r*0.9, cy);
+      ctx2.moveTo(cx, cy - r*0.9); ctx2.lineTo(cx, cy - r*0.15);
+      ctx2.moveTo(cx, cy + r*0.15); ctx2.lineTo(cx, cy + r*0.9);
+      ctx2.stroke();
+      // 중심점
+      ctx2.beginPath();
+      ctx2.arc(cx, cy, 2, 0, Math.PI*2);
+      ctx2.fillStyle = `rgba(0,255,100,${alpha})`;
+      ctx2.fill();
+      // 스코프 원 테두리
+      ctx2.strokeStyle = `rgba(40,40,40,${alpha})`;
+      ctx2.lineWidth = 3;
+      ctx2.beginPath();
+      ctx2.arc(cx, cy, r, 0, Math.PI*2);
+      ctx2.stroke();
+    }
   }
 
   renderer.render(renderer.camera);
-}  // ← loop 함수의 닫는 중괄호는 여기에만 있어야 합니다
+}
 
 updateHud();
 playerCountEl.textContent = 'PLAYERS: 1';
