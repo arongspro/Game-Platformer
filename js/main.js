@@ -873,12 +873,12 @@ function loop() {
       ctx2.arc(cx, cy, r, 0, Math.PI*2);
       ctx2.stroke();
     }
-  }
 
   renderer.render(renderer.camera);
 }
 
 updateHud();
+
 playerCountEl.textContent = 'PLAYERS: 1';
 loop();
 
