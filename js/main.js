@@ -597,10 +597,10 @@ player.grenadeSystem.onExplode = (pos, radius, maxDamage, meta = {}) => {
   }
   if (myDist < radius) {
     const falloff = Math.max(0, 1 - (myDist / radius));
-    const selfDmg = Math.round(maxDamage * falloff * falloff * 0.75);
+    const selfDmg = Math.round(maxDamage * falloff * falloff * 0.5); // reduced from 0.75
     if (selfDmg > 0) {
       player.health = Math.max(0, player.health - selfDmg);
-      player.applyKnockback(pos, 1.8 + falloff * 4.2);
+      player.applyKnockback(pos, 2.5 + falloff * 5.5); // stronger knockback for grenade jump
       addKillfeed(`GRENADE SELF ${selfDmg}`);
     }
   }
