@@ -1064,11 +1064,11 @@ export class Player {
 
   applyKnockback(origin, force) {
     const dir = this.pos.clone().sub(origin);
-    dir.y = Math.max(0.35, dir.y + 0.2);
+    dir.y = Math.max(0.5, dir.y + 0.4);   // strong upward bias for grenade jump
     if (dir.lengthSq() < 0.001) dir.set(0, 1, 0);
     dir.normalize().multiplyScalar(force);
     this.pos.addScaledVector(dir, 0.35);
-    this.yVel = Math.max(this.yVel, dir.y * 0.18);
+    this.yVel = Math.max(this.yVel, dir.y * 0.55); // was 0.18 — restored jump height
     this.isJumping = true;
   }
 }
