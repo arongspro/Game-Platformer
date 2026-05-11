@@ -310,7 +310,6 @@ export class Network {
 
     const weapon = ['rifle', 'sniper', 'pistol'].includes(weaponType) ? weaponType : 'rifle';
     const hitId  = `${this.myUid}_${Date.now()}`;
-    const hitId  = `${this.myUid.slice(0, 8)}_${Date.now()}`;
 
     set(ref(this.db, `hits/${targetUid}/${hitId}`), {
       damage,
