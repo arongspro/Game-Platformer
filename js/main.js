@@ -242,56 +242,56 @@ function updateScoreboard() {
   });
 }
 
-// ── HUD ──
 function updateHud() {
   player._syncWeaponStats();
-  const weapon = player.getLoadoutWeapon();
+  const weapon      = player.getLoadoutWeapon();
   const weaponState = player.getLoadoutState();
-  const hp  = player.health;
-  const pct = hp / player.maxHealth;
+  const slot        = player.weaponSlot;
+  const hp          = player.health;
+  const pct         = hp / player.maxHealth;
+
   healthFill.style.width = (pct * 100) + '%';
   healthNum.textContent  = hp;
+  healthFill.className   = pct <= 0.3 ? 'crit' : pct <= 0.6 ? 'warn' : '';
+  healthNum.style.color  = pct <= 0.3 ? '#ff3c3c' : pct <= 0.6 ? '#ffcc00' : '';
 
-  healthFill.className = '';
-  if      (pct <= 0.3) { healthFill.classList.add('crit'); healthNum.style.color = '#ff3c3c'; }
-  else if (pct <= 0.6) { healthFill.classList.add('warn'); healthNum.style.color = '#ffcc00'; }
-  else                 { healthNum.style.color = ''; }
-
-  if (player.weaponSlot === 1 || player.weaponSlot === 2 || player.weaponSlot === 5) {
+  if (slot === 1 || slot === 2 || slot === 5) {
     ammoCurrentEl.textContent = weaponState.ammo;
-    ammoMaxEl.textContent     = '/ ' + weapon.maxAmmo + '  [' + weaponState.reserve + ']';
+    ammoMaxEl.textContent     = `/ ${weapon.maxAmmo}  [${weaponState.reserve}]`;
     ammoMode.textContent      = weaponState.reloading ? '[RELOADING...]' : `[${weapon.mode}] ${weapon.name}`;
     ammoCurrentEl.classList.toggle('sniper-ammo', !!weapon.scope);
-  } else if (player.weaponSlot === 4) {
+  } else if (slot === 4) {
     ammoCurrentEl.textContent = '💣 ' + player.grenadeCount;
     ammoMaxEl.textContent     = '/ 3';
     const charge = Math.round((player.grenadeCharge / player.grenadeMaxCharge) * 100);
     ammoMode.textContent      = player.isChargingGrenade ? `[CHARGE ${charge}%]` : '[GRENADE]';
     ammoCurrentEl.classList.remove('sniper-ammo');
-  } else if (player.weaponSlot === 3) {
+  } else if (slot === 3) {
     ammoCurrentEl.textContent = 'BANDAGE';
     ammoMaxEl.textContent     = `× ${player.bandageCount}`;
     ammoMode.textContent      = isAtBase() ? '[BASE HEAL]' : '[BASE ONLY]';
     ammoCurrentEl.classList.remove('sniper-ammo');
   }
-  reloadBar.classList.toggle('blocked', !isAtBase() && player.weaponSlot !== 4);
-  updateTierHud();
-  updateMatchHud();
-  reloadBar.classList.toggle('visible', player.isReloading || player.sniperReloading || player.pistolReloading || !!weaponState.reloading);
+
+  reloadBar.classList.toggle('blocked',  !isAtBase() && slot !== 4);
+  reloadBar.classList.toggle('visible',  player.isReloading || player.sniperReloading || player.pistolReloading || !!weaponState.reloading);
   bandageBar.classList.toggle('visible', player.isBandaging);
 
   const invincible = network.isInvincible();
   if (invincible) {
     const remainMs = 3000 - (Date.now() - network._respawnTime);
     dashCdEl.classList.add('visible');
-    dashCdEl.textContent  = `🛡️ INVINCIBLE ${(remainMs/1000).toFixed(1)}s`;
-    dashCdEl.style.color  = '#00ffe0';
+    dashCdEl.textContent = `🛡️ INVINCIBLE ${(remainMs / 1000).toFixed(1)}s`;
+    dashCdEl.style.color = '#00ffe0';
   } else {
-    dashCdEl.style.color  = '';
+    dashCdEl.style.color = '';
     dashCdEl.classList.toggle('visible', player.dashCooldown > 0);
     if (player.dashCooldown > 0)
-      dashCdEl.textContent = `DASH CD: ${Math.ceil(player.dashCooldown/60)}s`;
+      dashCdEl.textContent = `DASH CD: ${Math.ceil(player.dashCooldown / 60)}s`;
   }
+
+  updateTierHud();
+  updateMatchHud();
 }
 
 // ── Hitmarker ──
@@ -772,9 +772,10 @@ function loop() {
 
     adsVignette.style.opacity = player.adsProgress;
 
-    // Sniper scope FOV
-    const speedPulse = player.speedBoost + (player.isSliding ? 0.045 : 0);
-    camCtrl.setFovFromScope(player.getLoadoutWeapon().scope ? player.scopeProgress : 0, speedPulse);
+    const weapon      = player.getLoadoutWeapon();
+    const weaponState = player.getLoadoutState();
+    const speedPulse  = player.speedBoost + (player.isSliding ? 0.045 : 0);
+    camCtrl.setFovFromScope(weapon.scope ? player.scopeProgress : 0, speedPulse);
     document.body.classList.toggle('speeding', speedPulse > 0.025);
 
     if (hitmarkerTimer > 0) {
@@ -783,14 +784,13 @@ function loop() {
     }
 
     if (player.isReloading) {
-      reloadFill.style.width = ((1 - player.reloadTimer/player.reloadDuration)*100) + '%';
-    } else if (player.getLoadoutState()?.reloading) {
-      const state = player.getLoadoutState();
-      const weapon = player.getLoadoutWeapon();
-      reloadFill.style.width = ((1 - state.reloadTimer / weapon.reload) * 100) + '%';
+      reloadFill.style.width = ((1 - player.reloadTimer / player.reloadDuration) * 100) + '%';
+    } else if (weaponState?.reloading) {
+      reloadFill.style.width = ((1 - weaponState.reloadTimer / weapon.reload) * 100) + '%';
     }
+
     if (player.isBandaging) {
-      bandageFill.style.width = ((1 - player.bandageTimer/player.bandageDuration)*100) + '%';
+      bandageFill.style.width = ((1 - player.bandageTimer / player.bandageDuration) * 100) + '%';
       bandageBar.classList.add('visible');
     } else {
       bandageBar.classList.remove('visible');
@@ -835,7 +835,8 @@ function loop() {
   }
 
   // ── Sniper scope overlay ──
-  const scopeOn = player.getLoadoutWeapon().scope && player.scopeProgress > 0.05;
+  const _weapon  = player.getLoadoutWeapon();
+  const scopeOn  = _weapon.scope && player.scopeProgress > 0.05;
   sniperScopeEl.style.display = scopeOn ? 'block' : 'none';
   if (scopeOn) {
     const W = window.innerWidth, H = window.innerHeight;
