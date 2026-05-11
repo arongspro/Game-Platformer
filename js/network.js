@@ -4,7 +4,7 @@
 import { initializeApp, getApps } from 'firebase/app';
 import { getDatabase, ref, set, onValue, remove, onDisconnect, get, child, update, serverTimestamp }
   from 'firebase/database';
-import { getAuth } from 'firebase/auth';
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
 
 const FIREBASE_CONFIG = {
   apiKey:            "AIzaSyCHXYjHr67AHEj6cfUUn5jxGfKa3c5adYE",
@@ -23,14 +23,10 @@ export class Network {
   constructor(userInfo) {
     this.db       = getDatabase(fireApp);
     this.auth     = getAuth(fireApp);
-    this.myUid    = userInfo.uid || this.auth.currentUser?.uid;
+    this.myUid    = userInfo.uid || this.auth.currentUser?.uid || null;
     this.myId     = this.myUid;
     this.nickname = userInfo.nickname;
     this.pixels   = userInfo.pixels;
-
-    if (!this.myUid) {
-      console.error('[Network] UID 없음 - 인증이 완료되지 않았습니다.');
-    }
 
     this.otherPlayers = {};
     this.myHealth     = 100;
@@ -60,7 +56,30 @@ export class Network {
     this._sendInterval = 50;
     this._unsubs       = [];
 
-    this._setupListeners();
+    // Wait for Firebase auth to restore uid before setting up listeners
+    if (this.myUid) {
+      this._setupListeners();
+    } else {
+      console.warn('[Network] uid not ready, waiting for auth...');
+      const unsub = onAuthStateChanged(this.auth, user => {
+        unsub(); // unsubscribe immediately after first call
+        if (user) {
+          this.myUid = user.uid;
+          this.myId  = user.uid;
+          console.log('[Network] uid restored:', this.myUid);
+        } else {
+          // No session — sign in anonymously as fallback
+          import('firebase/auth').then(({ signInAnonymously }) => {
+            signInAnonymously(this.auth).then(cred => {
+              this.myUid = cred.user.uid;
+              this.myId  = cred.user.uid;
+              console.log('[Network] anonymous uid obtained:', this.myUid);
+            }).catch(e => console.error('[Network] signInAnonymously failed:', e));
+          });
+        }
+        this._setupListeners();
+      });
+    }
   }
 
   // pos 배열 → {x,y,z} 객체 (규칙 호환)
@@ -257,12 +276,9 @@ export class Network {
     this._setupListeners();
   }
 
-  // ── 위치 전송: 경로 2곳에 분리 저장 ──
+  // ── Send position: write to 2 paths ──
   sendUpdate(snapshot) {
-    if (!this.myUid) {
-      console.warn('[Network] sendUpdate 스킵: myUid 없음');
-      return;
-    }
+    if (!this.myUid) return; // silently skip until auth ready
     const now = Date.now();
     if (now - this._lastSend < this._sendInterval) return;
     this._lastSend = now;
@@ -302,8 +318,9 @@ export class Network {
     }).catch(() => {});
   }
 
-  // ── 피격 전송: hits/$victim/$hitId (규칙 준수) ──
+  // ── Send hit: hits/$victim/$hitId ──
   sendHit(targetUid, damage = 15, weaponType = 'rifle') {
+    if (!this.myUid) return;
     if (!this._targetHp) this._targetHp = {};
     if (this._targetHp[targetUid] === undefined) this._targetHp[targetUid] = 100;
     this._targetHp[targetUid] = Math.max(0, this._targetHp[targetUid] - damage);
