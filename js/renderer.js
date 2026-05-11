@@ -551,6 +551,9 @@ export class Renderer {
   }
 
   render(camera) {
+    // Sync weapon camera rotation with main camera so 1P gun follows view
+    this.weaponCamera.quaternion.copy(camera.quaternion);
+
     this.renderer.autoClear = true;
     this.renderer.render(this.scene, camera);
     this.renderer.autoClear = false;
