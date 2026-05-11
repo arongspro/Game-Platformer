@@ -144,10 +144,13 @@ export class Player {
     // Build 3P body first (gun inserted after OBJ load)
     this._buildLocalBody(renderer);
 
+    // All 1P weapon groups are added to weaponCamera so they follow the view in local space
+    const wCam = renderer.weaponCamera;
+
     // 1P weapon group (mesh added after OBJ load)
     this._fpWeaponGroup = new THREE.Group();
-    this._fpWeaponGroup.position.set(0.25, -0.85, -0.15);
-    renderer.weaponScene.add(this._fpWeaponGroup);
+    this._fpWeaponGroup.position.set(0.25, -0.55, -0.45);
+    wCam.add(this._fpWeaponGroup);
 
     // 1P grenade group
     this._fpGrenadeGroup = new THREE.Group();
@@ -160,17 +163,17 @@ export class Player {
     const pinMat = new THREE.MeshLambertMaterial({ color: 0xdddddd });
     const pin = new THREE.Mesh(pinGeo, pinMat);
     pin.position.set(0.04, 0.07, 0);
-    pin.rotation.z = Math.PI/4;
+    pin.rotation.z = Math.PI / 4;
     this._fpGrenadeGroup.add(gMesh, pin);
-    this._fpGrenadeGroup.position.set(0.18, -0.80, -0.40);
-    renderer.weaponScene.add(this._fpGrenadeGroup);
+    this._fpGrenadeGroup.position.set(0.18, -0.55, -0.40);
+    wCam.add(this._fpGrenadeGroup);
 
     // ── 1P sniper group (simple box model) ──
     this._fpSniperGroup = new THREE.Group();
     this._fpSniperGroup.visible = false;
-    const sMat = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
+    const sMat  = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
     const sMat2 = new THREE.MeshLambertMaterial({ color: 0x333333 });
-    const sBody = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.07, 0.70), sMat);
+    const sBody   = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.07, 0.70), sMat);
     const sBarrel = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.025, 0.30), sMat2);
     sBarrel.position.set(0, 0.015, -0.50);
     const sScope = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.20, 8), new THREE.MeshLambertMaterial({ color: 0x111111 }));
@@ -179,21 +182,21 @@ export class Player {
     const sGrip = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.12, 0.05), sMat2);
     sGrip.position.set(0, -0.085, 0.10);
     this._fpSniperGroup.add(sBody, sBarrel, sScope, sGrip);
-    this._fpSniperGroup.position.set(0.22, -0.78, -0.55);
-    renderer.weaponScene.add(this._fpSniperGroup);
+    this._fpSniperGroup.position.set(0.22, -0.55, -0.55);
+    wCam.add(this._fpSniperGroup);
 
     // ── 1P pistol group ──
     this._fpPistolGroup = new THREE.Group();
     this._fpPistolGroup.visible = false;
-    const pMat3 = new THREE.MeshLambertMaterial({ color: 0x2a2a2a });
-    const pBody = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.10, 0.18), pMat3);
+    const pMat3  = new THREE.MeshLambertMaterial({ color: 0x2a2a2a });
+    const pBody   = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.10, 0.18), pMat3);
     const pBarrel = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.10), pMat3);
     pBarrel.position.set(0, 0.015, -0.14);
     const pGrip2 = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.12, 0.055), new THREE.MeshLambertMaterial({ color: 0x3a2a1a }));
     pGrip2.position.set(0, -0.10, 0.06);
     this._fpPistolGroup.add(pBody, pBarrel, pGrip2);
-    this._fpPistolGroup.position.set(0.20, -0.75, -0.45);
-    renderer.weaponScene.add(this._fpPistolGroup);
+    this._fpPistolGroup.position.set(0.20, -0.55, -0.45);
+    wCam.add(this._fpPistolGroup);
 
     // OBJ async load
     this._loadGun(renderer);
@@ -927,98 +930,92 @@ export class Player {
   }
 
   // ─────────────────────────────────────────
-  // 1P weapon update
-  // ─────────────────────────────────────────
+  // 1P weapon update — all positions are in weaponCamera local space
   _updateFirstPersonWeapon(camCtrl) {
-    const fp = camCtrl.isFirstPerson;
+    const fp       = camCtrl.isFirstPerson;
     const equipped = this.getLoadoutWeapon();
 
-    // Show/hide by slot
     this._fpWeaponGroup.visible  = fp && !equipped.scope && (this.weaponSlot === 1 || this.weaponSlot === 2);
     this._fpGrenadeGroup.visible = fp && this.weaponSlot === 4;
-    // Sniper/pistol use separate groups (fall back to main gun group)
     if (this._fpSniperGroup) this._fpSniperGroup.visible = fp && equipped.scope;
     if (this._fpPistolGroup) this._fpPistolGroup.visible = fp && this.weaponSlot === 5 && !equipped.scope;
 
     if (!fp) return;
 
-    // ── Grenade slot animation ──
+    // ── Common values ──
+    const ads       = this.adsProgress;
+    const recoilZ   = this.recoilOffset;
+    const recoilY   = this.recoilOffset * 0.08;
+    const bobFactor = this.isAiming ? 0.15 : 1.0;
+    const bobX      = Math.cos(this.moveTime * 5)  * 0.005 * this.bobAmp * bobFactor;
+    const bobY      = Math.sin(this.moveTime * 10) * 0.005 * this.bobAmp * bobFactor;
+
+    // Hip-fire position (right side, slightly below centre)
+    // ADS position (dead centre of screen)
+    const HIP_X = 0.22,  HIP_Y = -0.30, HIP_Z = -0.45;
+    const ADS_X = 0.0,   ADS_Y =  0.0,  ADS_Z = -0.35;
+
+    // ── Grenade ──
     if (this.weaponSlot === 4) {
       const charge = this.grenadeCharge / this.grenadeMaxCharge;
-      const bob = Math.sin(this.moveTime * 10) * 0.004 * this.bobAmp;
+      const bob    = Math.sin(this.moveTime * 10) * 0.004 * this.bobAmp;
       this._fpGrenadeGroup.position.set(
         0.18 + charge * 0.04,
-        -0.80 - charge * 0.08 + bob,
+        -0.20 - charge * 0.08 + bob,
         -0.40 + charge * 0.12
       );
       this._fpGrenadeGroup.rotation.set(
         Math.sin(this.moveTime * 7) * 0.02 * this.bobAmp,
-        Math.PI * 0.05,
-        charge * -0.15
+        0, charge * -0.15
       );
       return;
     }
 
-    const ads  = this.adsProgress;
-    const hipX = 0.22, hipY = -0.78, hipZ = -0.55;
-    const adsX = 0.0,  adsY = -0.68, adsZ = -0.30;
-
-    const recoilZ = this.recoilOffset;
-    const recoilY = this.recoilOffset * 0.1;
-
-    const bobFactor = this.isAiming ? 0.2 : 1.0;
-    const bobX = Math.cos(this.moveTime * 5)  * 0.006 * this.bobAmp * bobFactor;
-    const bobY = Math.sin(this.moveTime * 10) * 0.006 * this.bobAmp * bobFactor;
-
-    // ── Sniper slot ──
+    // ── Sniper ──
     if (equipped.scope) {
       const scope = this.scopeProgress;
-      // Scope: center weapon, minimise hand sway
-      const sx = 0.22 + (0.0 - 0.22) * scope;
-      const sy = -0.78 + (0.68 - 0.78) * scope;  // slightly up
-      const sz = -0.55 + (-0.20 + 0.55) * scope;  // closer
-      let grp = this._fpSniperGroup || this._fpWeaponGroup;
-      const bx = Math.cos(this.moveTime * 5)  * 0.006 * this.bobAmp * (scope > 0.5 ? 0.1 : 1.0);
-      const by = Math.sin(this.moveTime * 10) * 0.006 * this.bobAmp * (scope > 0.5 ? 0.1 : 1.0);
-      grp.position.set(sx + bx, sy + recoilY + by, sz + recoilZ);
-      grp.rotation.set(
-        THREE.MathUtils.degToRad(0),
-        Math.PI,
-        THREE.MathUtils.degToRad(0)
+      const bx    = Math.cos(this.moveTime * 5)  * 0.005 * this.bobAmp * (scope > 0.5 ? 0.1 : 1.0);
+      const by    = Math.sin(this.moveTime * 10) * 0.005 * this.bobAmp * (scope > 0.5 ? 0.1 : 1.0);
+      const grp   = this._fpSniperGroup || this._fpWeaponGroup;
+      // ADS: slide gun to centre (0,0)
+      grp.position.set(
+        HIP_X + (0.0 - HIP_X) * scope + bx,
+        HIP_Y + (0.0 - HIP_Y) * scope + recoilY + by,
+        HIP_Z + (-0.30 - HIP_Z) * scope + recoilZ
       );
+      grp.rotation.set(0, 0, 0);
       return;
     }
 
-    // ── Pistol slot ──
+    // ── Pistol ──
     if (this.weaponSlot === 5) {
-      let grp = this._fpPistolGroup || this._fpWeaponGroup;
-      const isAimingP = this.mouse.right;
-      const pAds = this.adsProgress;
-      const px = hipX + (adsX - hipX) * pAds + bobX;
-      const py = hipY + (adsY - hipY) * pAds + recoilY + bobY;
-      const pz = hipZ + (adsZ - hipZ) * pAds + recoilZ;
-      grp.position.set(px, py, pz);
-      grp.rotation.set(0, Math.PI, 0);
+      const grp = this._fpPistolGroup || this._fpWeaponGroup;
+      grp.position.set(
+        HIP_X + (ADS_X - HIP_X) * ads + bobX,
+        HIP_Y + (ADS_Y - HIP_Y) * ads + recoilY + bobY,
+        HIP_Z + (ADS_Z - HIP_Z) * ads + recoilZ
+      );
+      grp.rotation.set(0, 0, 0);
       return;
     }
 
-    // ── M4A1 slot ──
+    // ── M4A1 ──
     let reloadY = 0, reloadRX = 0, reloadRZ = 0;
     if (this.isReloading) {
       const prog = 1 - (this.reloadTimer / this.reloadDuration);
-      reloadY  = -Math.sin(prog * Math.PI) * 0.5;
-      reloadRX =  Math.sin(prog * Math.PI) * 60;
-      reloadRZ =  Math.sin(prog * Math.PI) * 30;
+      reloadY  = -Math.sin(prog * Math.PI) * 0.18;
+      reloadRX =  Math.sin(prog * Math.PI) * 20;
+      reloadRZ =  Math.sin(prog * Math.PI) * 10;
     }
 
-    const curX = hipX + (adsX - hipX) * ads + bobX;
-    const curY = hipY + (adsY - hipY) * ads + recoilY + bobY + reloadY;
-    const curZ = hipZ + (adsZ - hipZ) * ads + recoilZ;
-
-    this._fpWeaponGroup.position.set(curX, curY, curZ);
+    this._fpWeaponGroup.position.set(
+      HIP_X + (ADS_X - HIP_X) * ads + bobX,
+      HIP_Y + (ADS_Y - HIP_Y) * ads + recoilY + bobY + reloadY,
+      HIP_Z + (ADS_Z - HIP_Z) * ads + recoilZ
+    );
     this._fpWeaponGroup.rotation.set(
       THREE.MathUtils.degToRad(reloadRX),
-      Math.PI,
+      0,
       THREE.MathUtils.degToRad(reloadRZ)
     );
   }
