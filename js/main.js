@@ -1,4 +1,4 @@
-// main.js - 게임 루프, HUD, 세션 체크, 킬뎃, 이름표
+// main.js - Game loop, HUD, session check, kill feed, name tags
 
 import * as THREE from 'three';
 import { Renderer }         from './renderer.js';
@@ -8,7 +8,7 @@ import { Network }          from './network.js';
 import { getRatingTier }    from './ranks.js';
 import { WEAPON_CATALOG, getWeaponById, normalizeLoadout } from './weapons.js';
 
-// ── 세션 체크 (로그인 안 했으면 login.html로) ──
+// ── Session check (redirect to login.html if not logged in) ──
 const rawUser = sessionStorage.getItem('vp_user');
 if (!rawUser) {
   window.location.href = 'login.html';
@@ -73,7 +73,7 @@ const chatMessagesEl    = document.getElementById('chat-messages');
 const chatInputWrapEl   = document.getElementById('chat-input-wrap');
 const chatInputEl       = document.getElementById('chat-input');
 
-// FPS / Ping 측정
+// FPS / Ping measurement
 let _fpsFrames = 0, _fpsAccum = 0, _fpsValue = 0;
 let _pingValue = 0;
 function _measurePing() {
@@ -93,17 +93,17 @@ let matchKillLimit = storedLimit === 20 ? 20 : 10;
 let matchEnded = false;
 if (matchLimitSelect) matchLimitSelect.value = String(matchKillLimit);
 
-// 닉네임 표시
+// Display nickname
 myNickEl.textContent = userInfo.nickname;
 
-// ── 초기화 ──
+// ── Initialisation ──
 const renderer = new Renderer(canvas);
 const camCtrl  = new CameraController(renderer.camera);
 const player   = new Player(renderer.getBoxes(), renderer);
 const network  = new Network(userInfo);
 player.canUseBaseAction = () => isAtBase();
 
-// 로컬 플레이어 픽셀 캐릭터 적용
+// Apply local player pixel character
 setTimeout(() => {
   if (userInfo.pixels) player.applyPixels(userInfo.pixels);
 }, 500);
@@ -111,7 +111,7 @@ setTimeout(() => {
 const remoteMeshes = {};
 const clock = new THREE.Clock();
 
-// ── 포인터 락 ──
+// ── Pointer lock ──
 function tryLock() {
   const fn = canvas.requestPointerLock || canvas.mozRequestPointerLock || canvas.webkitRequestPointerLock;
   if (fn) fn.call(canvas);
@@ -129,6 +129,8 @@ function isLocked() {
 }
 
 function onPointerLockChange() {
+  // Don't show lock overlay while chat is open
+  if (_chatOpen) { lockOverlay.style.display = 'none'; return; }
   lockOverlay.style.display = isLocked() ? 'none' : 'flex';
 }
 document.addEventListener('pointerlockchange',       onPointerLockChange);
@@ -136,7 +138,7 @@ document.addEventListener('mozpointerlockchange',    onPointerLockChange);
 document.addEventListener('webkitpointerlockchange', onPointerLockChange);
 document.addEventListener('pointerlockerror', () => console.warn('Pointer lock failed'));
 
-// ── 마우스/키 ──
+// ── Mouse / Keys ──
 document.addEventListener('mousemove', e => {
   if (!isLocked()) return;
   camCtrl.onMouseMove(
@@ -195,7 +197,7 @@ window.addEventListener('keyup', e => {
   if (e.code === 'Tab') showScoreboard(false);
 });
 
-// ── 스코어보드 (TAB) ──
+// ── Scoreboard (TAB) ──
 function showScoreboard(visible) {
   if (visible) {
     updateScoreboard();
@@ -209,7 +211,7 @@ function updateScoreboard() {
   const rows = scoreboardEl.querySelector('.sb-rows');
   rows.innerHTML = '';
 
-  // 내 정보
+  // My info
   const allPlayers = [
     { nick: network.nickname, kills: network.kills, deaths: network.deaths, rating: network.rating, isMe: true },
     ...Object.values(network.otherPlayers).map(p => ({
@@ -221,7 +223,7 @@ function updateScoreboard() {
     }))
   ];
 
-  // 킬 순 정렬
+  // Sort by kills
   allPlayers.sort((a,b) => b.kills - a.kills);
 
   allPlayers.forEach((p, i) => {
@@ -292,7 +294,7 @@ function updateHud() {
   }
 }
 
-// ── 히트마커 ──
+// ── Hitmarker ──
 let hitmarkerTimer = 0;
 function showHitmarker(isHeadshot = false) {
   hitmarker.classList.add('active');
@@ -306,7 +308,7 @@ function pulseHitEffect(isHeadshot = false) {
   document.body.classList.add(isHeadshot ? 'headshot-kick' : 'hit-kick');
 }
 
-// ── 킬피드 ──
+// ── Kill feed ──
 function addKillfeed(text, isKill = false) {
   const el = document.createElement('div');
   el.className   = 'killfeed-entry' + (isKill ? ' killfeed-kill' : '');
@@ -315,15 +317,15 @@ function addKillfeed(text, isKill = false) {
   setTimeout(() => el.remove(), 3000);
 }
 
-// ── 부위별 히트박스 레이캐스트 ──
-// 기본 데미지 (M4A1 기준)
+// ── Per-part hitbox raycast ──
+// Base damage (M4A1 reference)
 const HITBOXES = [
   { name:'HEAD', offsetY:1.95, halfH:0.31, radius:0.34, rifle:20, sniper:100 },
   { name:'BODY', offsetY:1.25, halfH:0.42, radius:0.47, rifle:10, sniper:40 },
   { name:'LEGS', offsetY:0.45, halfH:0.52, radius:0.35, rifle: 5, sniper:25 },
 ];
 
-// 무기별 데미지 테이블
+// Per-weapon damage table
 const WEAPON_DAMAGE = {
   rifle:  { HEAD: 20, BODY: 10, LEGS:  5 },
   sniper: { HEAD:100, BODY: 40, LEGS: 40 },
@@ -348,7 +350,7 @@ function rayVsCapsule(origin, front, center, halfH, radius) {
   return t;
 }
 
-// 레이 vs AABB 박스 교차 거리 반환 (교차 없으면 Infinity)
+// Ray vs AABB box intersection distance (Infinity if no hit)
 function rayVsBox(origin, front, box) {
   const [bx, by, bz] = box.pos;
   const [sx, sy, sz] = box.size;
@@ -374,7 +376,7 @@ function rayVsBox(origin, front, box) {
   return tEnter > 0 ? tEnter : tExit;
 }
 
-// 레이가 맵 벽에 가로막히는지 검사 - 가장 가까운 벽 거리 반환
+// Check if ray is blocked by map wall - return nearest wall distance
 function wallBlockDist(origin, front) {
   const boxes = player.boxes;
   let minDist = Infinity;
@@ -392,7 +394,7 @@ function checkHit(weaponType = 'rifle') {
   let bestDist=200, hitTarget=null, hitDamage=0, hitPart='';
   let hitPoint = null;
 
-  // 벽까지의 거리 — 이보다 멀리 있는 플레이어는 맞지 않음
+  // Wall distance — players beyond this cannot be hit
   const wallDist = wallBlockDist(origin, front);
   const dmgTable = WEAPON_DAMAGE[weaponType] || WEAPON_DAMAGE.rifle;
 
@@ -431,7 +433,7 @@ function updateTierHud() {
   const tier = getRatingTier(network.rating);
   tierNameEl.textContent = tier.name;
   tierRatingEl.textContent = `${network.rating} RP`;
-  const badgeText = tier.name === '챌린저' ? 'C' : (tier.name.split(' ')[1] || 'V');
+  const badgeText = tier.name === 'Challenger' ? 'C' : (tier.name.split(' ')[1] || 'V');
   const badgeInner = tierBadgeEl.querySelector('span');
   if (badgeInner) badgeInner.textContent = badgeText;
   tierBadgeEl.style.borderColor = tier.color;
@@ -469,20 +471,20 @@ function updateRoomHud(meta = null) {
   updateMatchHud();
 }
 
-// ── 보급상자 ──
+// ── Supply crates ──
 const CRATE_INTERACT_DIST = 3.5;
 
-// 플랫폼별 상자 위치 [x, y, z]
-// 각 플랫폼 중앙, 구조물이 있으면 그 뒤쪽에 배치
-// 1) 스폰(y=1):  코너 기둥 뒤  → z=+방향쪽 안쪽
-// 2) 계단 플랫폼(y=6):  왼쪽 탑(x=-13,z=42) 뒤 → z=44
-// 3) 중간 플랫폼(y=13.5): 큐브(0,15,99) 뒤 → z=102
-// 4) 최종 플랫폼(y=24):  큰 큐브(0,25,152) 뒤 → z=156
+// Crate positions per platform [x, y, z]
+// Centre of each platform, behind structures if present
+// 1) Spawn (y=1): behind corner pillar
+// 2) Stair platform (y=6): behind left tower (x=-13,z=42)
+// 3) Mid platform (y=13.5): behind cube (0,15,99)
+// 4) Top platform (y=24): behind large cube (0,25,152)
 const CRATE_DEFS = [
-  { pos: new THREE.Vector3(  0,  2.2,   0) },   // 스폰: 수정 전 원래 위치
-  { pos: new THREE.Vector3(  0,  6.6,  35) },   // 계단 플랫폼 중앙
-  { pos: new THREE.Vector3(  0, 14.6, 102) },   // 중간 플랫폼: 큐브 뒤
-  { pos: new THREE.Vector3(  0, 24.6, 156) },   // 최종 플랫폼: 큰 큐브 뒤
+  { pos: new THREE.Vector3(  0,  2.2,   0) },   // Spawn: original position
+  { pos: new THREE.Vector3(  0,  6.6,  35) },   // Stair platform centre
+  { pos: new THREE.Vector3(  0, 14.6, 102) },   // Mid platform: behind cube
+  { pos: new THREE.Vector3(  0, 24.6, 156) },   // Top platform: behind large cube
 ];
 
 function makeELabel() {
@@ -512,18 +514,18 @@ function makeELabel() {
   return sprite;
 }
 
-// 상자 생성 함수
+// Crate builder
 function buildCrate(pos) {
   const group = new THREE.Group();
   group.position.copy(pos);
 
-  // 몸통
+  // Body
   const mat  = new THREE.MeshLambertMaterial({ color: 0x997733 });
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.2, 1.2), mat);
   mesh.castShadow = mesh.receiveShadow = true;
   group.add(mesh);
 
-  // 십자 표시 (윗면)
+  // Cross mark (top face)
   const crossMat = new THREE.MeshBasicMaterial({ color: 0xff2222 });
   const cV = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.03, 0.55), crossMat);
   const cH = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.03, 0.15), crossMat);
@@ -532,7 +534,7 @@ function buildCrate(pos) {
 
   renderer.scene.add(group);
 
-  // 라벨 스프라이트
+  // Label sprite
   const label = makeELabel();
   label.position.copy(pos);
   label.position.y += 1.6;
@@ -543,10 +545,10 @@ function buildCrate(pos) {
 
 const crates = CRATE_DEFS.map(d => buildCrate(d.pos));
 
-// E키 상호작용
+// E key interaction
 window.addEventListener('keydown', e => {
   if (e.code !== 'KeyE') return;
-  // 탄약·수류탄 모두 가득 차면 무시
+  // Ignore if all ammo and grenades are full
   const isFull = player.ammo === player.maxAmmo &&
                  player.totalAmmo === player.maxTotalAmmo &&
                  player.grenadeCount === player.maxGrenades &&
@@ -556,7 +558,7 @@ window.addEventListener('keydown', e => {
   for (const crate of crates) {
     if (player.pos.distanceTo(crate.pos) <= CRATE_INTERACT_DIST) {
       player.refillFromCrate();
-      addKillfeed('📦 보급 완료! 탄약 + 수류탄 리필');
+      addKillfeed('📦 Resupplied! Ammo + Grenades refilled');
       crate.mat.color.set(0x00ff88);
       setTimeout(() => crate.mat.color.set(0x997733), 300);
       break;
@@ -564,7 +566,7 @@ window.addEventListener('keydown', e => {
   }
 });
 
-// ── 콜백 연결 ──
+// ── Callback bindings ──
 player.onShoot     = () => {
   const front = camCtrl.getFront();
   renderer.spawnMuzzleFlash(camCtrl.getHeadPos(), front, player.getLoadoutWeapon().scope);
@@ -578,7 +580,7 @@ player.onDie = () => {
   updateHud();
 };
 
-// ── 수류탄 폭발 콜백 (직접 연결, setTimeout 없음) ──
+// ── Grenade explosion callback ──
 player.grenadeSystem.getContactTargets = () => [
   ...Object.entries(network.otherPlayers)
     .filter(([, info]) => info?.pos)
@@ -586,7 +588,7 @@ player.grenadeSystem.getContactTargets = () => [
 ];
 
 player.grenadeSystem.onExplode = (pos, radius, maxDamage, meta = {}) => {
-  // 내 위치 기준 화면 흔들림
+  // Screen shake based on my position
   const myCenter = player.pos.clone(); myCenter.y += 0.9;
   const myDist = myCenter.distanceTo(pos);
   if (myDist < radius * 1.5) {
@@ -603,7 +605,7 @@ player.grenadeSystem.onExplode = (pos, radius, maxDamage, meta = {}) => {
     }
   }
 
-  // 다른 플레이어 피해
+  // Damage other players
   for (const [pid, info] of Object.entries(network.otherPlayers)) {
     if (!info?.pos) continue;
     const tPos = new THREE.Vector3(info.pos[0], info.pos[1] + 0.9, info.pos[2]);
@@ -624,7 +626,7 @@ player.grenadeSystem.onExplode = (pos, radius, maxDamage, meta = {}) => {
 };
 
 player.onBandageUsed = () => {
-  addKillfeed('🩹 붕대 사용 완료! +30 HP');
+  addKillfeed('🩹 Bandage used! +30 HP');
   updateHud();
 };
 
@@ -664,11 +666,11 @@ network.onKill = (targetId, kills, deaths) => {
   updateHud();
 };
 
-// ── 채팅 ──
+// ── Chat ──
 const _seenChatTs = new Set();
 
 function addChatMessage({ uid, nickname, text, ts }) {
-  // 중복 방지
+  // Dedup
   const key = `${uid}_${ts}`;
   if (_seenChatTs.has(key)) return;
   _seenChatTs.add(key);
@@ -679,13 +681,13 @@ function addChatMessage({ uid, nickname, text, ts }) {
   div.innerHTML = `<span class="chat-nick">${escapeHtml(nickname)}</span>${escapeHtml(text)}`;
   chatMessagesEl.appendChild(div);
 
-  // 최대 30개 유지
+  // Keep max 30 messages
   while (chatMessagesEl.children.length > 30) {
     chatMessagesEl.removeChild(chatMessagesEl.firstChild);
   }
   chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
 
-  // 8초 후 자동 제거
+  // Auto-remove after 8s
   setTimeout(() => div.remove(), 8000);
 }
 
@@ -698,7 +700,11 @@ let _chatOpen = false;
 function openChat() {
   _chatOpen = true;
   chatInputWrapEl.classList.add('active');
+  // Release pointer lock so mouse is visible for typing
+  // but keep canvas interactive via CSS
   document.exitPointerLock?.();
+  // Prevent the lock overlay from appearing immediately
+  lockOverlay.style.display = 'none';
   setTimeout(() => chatInputEl.focus(), 30);
 }
 
@@ -706,6 +712,10 @@ function closeChat() {
   _chatOpen = false;
   chatInputWrapEl.classList.remove('active');
   chatInputEl.value = '';
+  chatInputEl.blur();
+  // Re-acquire pointer lock automatically
+  onPointerLockChange();
+  tryLock();
 }
 
 function submitChat() {
@@ -714,7 +724,7 @@ function submitChat() {
   closeChat();
 }
 
-// T키로 채팅 열기
+// T key to open chat
 window.addEventListener('keydown', e => {
   if (_chatOpen) return;
   if (e.code === 'KeyT' && !e.repeat) {
@@ -723,22 +733,22 @@ window.addEventListener('keydown', e => {
   }
 });
 
-// 채팅창 키 처리
+// Chat input key handling
 chatInputEl.addEventListener('keydown', e => {
   e.stopPropagation();
   if (e.code === 'Enter') { e.preventDefault(); submitChat(); }
   if (e.code === 'Escape') { e.preventDefault(); closeChat(); }
 });
 
-// 채팅 수신 시작
+// Start chat listener
 network.listenChat(addChatMessage);
 
-// ── 메인 루프 ──
+// ── Main loop ──
 function loop() {
   requestAnimationFrame(loop);
   const dt = Math.min(clock.getDelta(), 0.05);
 
-  // FPS 측정 (0.5초마다 갱신)
+  // FPS counter (update every 0.5s)
   _fpsFrames++;
   _fpsAccum += dt;
   if (_fpsAccum >= 0.5) {
@@ -762,7 +772,7 @@ function loop() {
 
     adsVignette.style.opacity = player.adsProgress;
 
-    // 저격 스코프 FOV
+    // Sniper scope FOV
     const speedPulse = player.speedBoost + (player.isSliding ? 0.045 : 0);
     camCtrl.setFovFromScope(player.getLoadoutWeapon().scope ? player.scopeProgress : 0, speedPulse);
     document.body.classList.toggle('speeding', speedPulse > 0.025);
@@ -789,10 +799,10 @@ function loop() {
     renderer.updateParticles(dt);
   }
 
-  // 포인터 락 여부와 무관하게 항상 위치 전송 (상대방에게 보이기 위함)
+  // Always send position regardless of pointer lock
   network.sendUpdate(player.getSnapshot(camCtrl));
 
-  // 보급상자
+  // Supply crates
   const isFull = player.ammo === player.maxAmmo &&
                  player.totalAmmo === player.maxTotalAmmo &&
                  player.grenadeCount === player.maxGrenades &&
@@ -803,7 +813,7 @@ function loop() {
     crate.group.rotation.y += 0.008;
   }
 
-  // ── 수류탄 충전바 / 슬롯 UI ──
+  // ── Grenade charge bar / slot UI ──
   if (player.weaponSlot === 4 && player.isChargingGrenade) {
     grenadeChargeEl.classList.add('visible');
     const pct = (player.grenadeCharge / player.grenadeMaxCharge) * 100;
@@ -811,7 +821,7 @@ function loop() {
   } else {
     grenadeChargeEl.classList.remove('visible');
   }
-  // 슬롯 하이라이트
+  // Slot highlight
   if (slot1El && slot4El && slot3El) {
     slot1El.classList.toggle('active', player.weaponSlot === 1);
     slot2El && slot2El.classList.toggle('active', player.weaponSlot === 2);
@@ -824,7 +834,7 @@ function loop() {
     if (pistolCountUI)  pistolCountUI.textContent  = player.getLoadoutWeapon(5).icon;
   }
 
-  // ── 저격 스코프 오버레이 ──
+  // ── Sniper scope overlay ──
   const scopeOn = player.getLoadoutWeapon().scope && player.scopeProgress > 0.05;
   sniperScopeEl.style.display = scopeOn ? 'block' : 'none';
   if (scopeOn) {
