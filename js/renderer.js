@@ -551,10 +551,11 @@ export class Renderer {
   }
 
   render(camera) {
-    // Weapon camera must fully match main camera (position + rotation)
-    // so the 1P gun sits in camera-local space correctly
-    this.weaponCamera.position.copy(camera.position);
+    // weaponCamera stays at world origin — weapons are in its local space.
+    // Only copy rotation so the gun follows the view direction.
+    this.weaponCamera.position.set(0, 0, 0);
     this.weaponCamera.quaternion.copy(camera.quaternion);
+    this.weaponCamera.updateMatrixWorld();
 
     this.renderer.autoClear = true;
     this.renderer.render(this.scene, camera);
