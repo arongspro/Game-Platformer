@@ -425,7 +425,10 @@ function checkHit(weaponType = 'rifle') {
 }
 
 function isAtBase() {
-  return player.pos.distanceTo(BASE_CENTER) <= BASE_RADIUS;
+  // Use XZ-plane distance only — jumping shouldn't push player out of base
+  const dx = player.pos.x - BASE_CENTER.x;
+  const dz = player.pos.z - BASE_CENTER.z;
+  return Math.sqrt(dx*dx + dz*dz) <= BASE_RADIUS;
 }
 
 function updateTierHud() {
@@ -821,7 +824,7 @@ function loop() {
   } else {
     grenadeChargeEl.classList.remove('visible');
   }
-  // Slot highlight
+  // Slot highlight + weapon names
   if (slot1El && slot4El && slot3El) {
     slot1El.classList.toggle('active', player.weaponSlot === 1);
     slot2El && slot2El.classList.toggle('active', player.weaponSlot === 2);
@@ -830,8 +833,18 @@ function loop() {
     slot3El.classList.toggle('active', player.weaponSlot === 3);
     if (grenadeCountUI) grenadeCountUI.textContent = `×${player.grenadeCount}`;
     if (bandageCountUI) bandageCountUI.textContent = `×${player.bandageCount}`;
-    if (sniperCountUI)  sniperCountUI.textContent  = player.getLoadoutWeapon(2).icon;
-    if (pistolCountUI)  pistolCountUI.textContent  = player.getLoadoutWeapon(5).icon;
+    // Update slot names to show actual weapon names
+    const w1 = player.getLoadoutWeapon(1);
+    const w2 = player.getLoadoutWeapon(2);
+    const w5 = player.getLoadoutWeapon(5);
+    const n1 = slot1El.querySelector('.slot-name');
+    const n2 = slot2El?.querySelector('.slot-name');
+    const n5 = slot5El?.querySelector('.slot-name');
+    if (n1) n1.textContent = w1?.name || 'M4A1';
+    if (n2) n2.textContent = w2?.name || 'SNIPER';
+    if (n5) n5.textContent = w5?.name || 'PISTOL';
+    if (sniperCountUI) sniperCountUI.textContent = `×${player.sniperAmmo ?? 5}`;
+    if (pistolCountUI) pistolCountUI.textContent = `×${player.pistolAmmo ?? 12}`;
   }
 
   // ── Sniper scope overlay ──
