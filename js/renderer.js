@@ -31,6 +31,7 @@ export class Renderer {
     // ── 무기 씬 (1인칭 오버레이) ──
     this.weaponScene  = new THREE.Scene();
     this.weaponCamera = new THREE.PerspectiveCamera(50, this.width / this.height, 0.001, 50);
+    this.weaponScene.add(this.weaponCamera);  // must be in scene for children to render
     this.weaponScene.add(new THREE.AmbientLight(0xffffff, 1.0));
     const wl = new THREE.DirectionalLight(0xffffff, 0.8);
     wl.position.set(1, 2, 3);
