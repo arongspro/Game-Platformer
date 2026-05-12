@@ -147,9 +147,14 @@ export class Player {
     // All 1P weapon groups are added to weaponCamera so they follow the view in local space
     const wCam = renderer.weaponCamera;
 
-    // 1P weapon group (mesh added after OBJ load)
+    // weaponCamera FOV=50, at z=-0.5:
+    //   half-height = 0.5 * tan(25°) = 0.233
+    //   half-width  = 0.233 * aspect ≈ 0.414  (16:9)
+    // Bottom-right corner anchor: x=+0.30, y=-0.20
+    // Gun sits slightly inward: x=+0.22, y=-0.16, z=-0.50
+
     this._fpWeaponGroup = new THREE.Group();
-    this._fpWeaponGroup.position.set(0.25, -0.55, -0.45);
+    this._fpWeaponGroup.position.set(0.22, -0.16, -0.50);
     wCam.add(this._fpWeaponGroup);
 
     // 1P grenade group
@@ -949,10 +954,11 @@ export class Player {
     const bobX      = Math.cos(this.moveTime * 5)  * 0.005 * this.bobAmp * bobFactor;
     const bobY      = Math.sin(this.moveTime * 10) * 0.005 * this.bobAmp * bobFactor;
 
-    // Hip-fire position (right side, slightly below centre)
-    // ADS position (dead centre of screen)
-    const HIP_X = 0.22,  HIP_Y = -0.30, HIP_Z = -0.45;
-    const ADS_X = 0.0,   ADS_Y =  0.0,  ADS_Z = -0.35;
+    // Hip-fire: bottom-right of screen (calculated from FOV=50, z=-0.50)
+    //   half-height at z=0.5: tan(25°)*0.5 = 0.233  → y=-0.16 = ~70% down
+    //   half-width  at z=0.5: 0.414         → x=+0.22 = ~53% right
+    const HIP_X = 0.22,  HIP_Y = -0.16, HIP_Z = -0.50;
+    const ADS_X = 0.00,  ADS_Y =  0.00, ADS_Z = -0.40;
 
     // ── Grenade ──
     if (this.weaponSlot === 4) {
