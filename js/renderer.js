@@ -32,10 +32,17 @@ export class Renderer {
     this.weaponScene  = new THREE.Scene();
     this.weaponCamera = new THREE.PerspectiveCamera(50, this.width / this.height, 0.001, 50);
     this.weaponScene.add(this.weaponCamera);  // must be in scene for children to render
-    this.weaponScene.add(new THREE.AmbientLight(0xffffff, 1.0));
-    const wl = new THREE.DirectionalLight(0xffffff, 0.8);
-    wl.position.set(1, 2, 3);
-    this.weaponScene.add(wl);
+
+    // Strong ambient so gun is never black
+    this.weaponScene.add(new THREE.AmbientLight(0xffffff, 2.5));
+    // Key light from top-front-right
+    const wKey = new THREE.DirectionalLight(0xffffff, 2.0);
+    wKey.position.set(1, 2, 1);
+    this.weaponScene.add(wKey);
+    // Fill light from left
+    const wFill = new THREE.DirectionalLight(0x8899ff, 0.8);
+    wFill.position.set(-1, 0, 1);
+    this.weaponScene.add(wFill);
 
     this._buildTextures();
     this._setupLights();
