@@ -235,13 +235,12 @@ export class Player {
         const maxDim = Math.max(size.x, size.y, size.z);
 
         // ── 1P gun ──
-        // 0.65 unit size (larger than original)
         const scale = 0.65 / maxDim;
         const gun1P = obj.clone(true);
         gun1P.scale.setScalar(scale);
-        // Center to origin + rotate 180° Y so muzzle faces -Z
+        // Center to origin. No Y rotation needed — camera local -Z is forward.
         gun1P.position.set(-center.x * scale, -center.y * scale, -center.z * scale);
-        gun1P.rotation.set(0, Math.PI, 0);
+        gun1P.rotation.set(0, 0, 0);
         this._fpWeaponGroup.add(gun1P);
         this._gunMesh1P = gun1P;
 
