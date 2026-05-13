@@ -31,18 +31,25 @@ export class Renderer {
     // ── 무기 씬 (1인칭 오버레이) ──
     this.weaponScene  = new THREE.Scene();
     this.weaponCamera = new THREE.PerspectiveCamera(50, this.width / this.height, 0.001, 50);
-    this.weaponScene.add(this.weaponCamera);  // must be in scene for children to render
+    this.weaponScene.add(this.weaponCamera);
 
-    // Strong ambient so gun is never black
-    this.weaponScene.add(new THREE.AmbientLight(0xffffff, 2.5));
-    // Key light from top-front-right
-    const wKey = new THREE.DirectionalLight(0xffffff, 2.0);
-    wKey.position.set(1, 2, 1);
+    // PBR lighting for MeshStandardMaterial gun
+    this.weaponScene.add(new THREE.AmbientLight(0xffffff, 1.2));
+
+    // Key light: top-right-front → main highlight on gun body
+    const wKey = new THREE.DirectionalLight(0xffeedd, 3.0);
+    wKey.position.set(2, 3, 2);
     this.weaponScene.add(wKey);
-    // Fill light from left
-    const wFill = new THREE.DirectionalLight(0x8899ff, 0.8);
-    wFill.position.set(-1, 0, 1);
+
+    // Fill light: left → soften shadows
+    const wFill = new THREE.DirectionalLight(0x8899cc, 1.2);
+    wFill.position.set(-2, 1, 1);
     this.weaponScene.add(wFill);
+
+    // Rim light: back-top → edge highlight for metal feel
+    const wRim = new THREE.DirectionalLight(0xaaccff, 0.8);
+    wRim.position.set(0, 2, -3);
+    this.weaponScene.add(wRim);
 
     this._buildTextures();
     this._setupLights();
