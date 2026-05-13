@@ -243,12 +243,25 @@ export class Player {
         box3.getCenter(center);
         const maxDim = Math.max(size.x, size.y, size.z);
 
+        // OBJ analysis: barrel runs along +Z (z: 1.45~36.77), Y center=9.56
+        // After rotation Y=PI: +Z becomes -Z (camera forward = correct)
+        // We offset so: muzzle tip sits near z=-0.3 in front of camera,
+        // grip at right-bottom of screen.
+
         // ── 1P gun ──
-        const scale = 0.65 / maxDim;
+        const scale = 0.55 / maxDim;
         const gun1P = obj.clone(true);
         gun1P.scale.setScalar(scale);
-        // Center to origin. Rotate 180° on Y to face muzzle toward -Z (camera forward).
-        gun1P.position.set(-center.x * scale, -center.y * scale, -center.z * scale);
+        // Shift so breech end (z=1.45 * scale after rot = front of view) is at z≈0
+        // After Y=PI rot, OBJ +Z → camera -Z:
+        //   OBJ z=1.45 (breech) → camera z = -1.45*scale ≈ -0.022  (near camera)
+        //   OBJ z=36.77 (muzzle) → camera z = -36.77*scale ≈ -0.555 (deep into scene)
+        // Offset to pull breech to z=0, center X, lower Y to grip level
+        gun1P.position.set(
+          -center.x * scale,          // X: centre the gun
+          -box3.min.y * scale * 0.55, // Y: raise so grip is at bottom (not center)
+          box3.min.z * scale          // Z: pull breech to z≈0 so whole gun is in -Z
+        );
         gun1P.rotation.set(0, Math.PI, 0);
         this._fpWeaponGroup.add(gun1P);
         this._gunMesh1P = gun1P;
