@@ -972,16 +972,20 @@ export class Player {
 
     const slot     = this.weaponSlot;
     const isSniper = equipped.scope && slot === 2;
-    const isPistol = slot === 5;
 
-    // Show exactly one group at a time
-    this._fpWeaponGroup.visible  = fp && slot === 1;
-    this._fpGrenadeGroup.visible = fp && slot === 4;
-    // Sniper/pistol: only show when that slot is SELECTED
-    if (this._fpSniperGroup) this._fpSniperGroup.visible = fp && slot === 2 && !!equipped.scope;
-    if (this._fpPistolGroup) this._fpPistolGroup.visible = fp && slot === 5;
+    // ── Hide every group first, then show only the active one ──
+    this._fpWeaponGroup.visible  = false;
+    this._fpGrenadeGroup.visible = false;
+    if (this._fpSniperGroup) this._fpSniperGroup.visible = false;
+    if (this._fpPistolGroup) this._fpPistolGroup.visible = false;
 
     if (!fp) return;
+
+    // Show only the selected slot
+    if (slot === 1) this._fpWeaponGroup.visible  = true;
+    if (slot === 4) this._fpGrenadeGroup.visible = true;
+    if (slot === 2 && this._fpSniperGroup) this._fpSniperGroup.visible = true;
+    if (slot === 5 && this._fpPistolGroup) this._fpPistolGroup.visible = true;
 
     const ads       = this.adsProgress;
     const recoilZ   = this.recoilOffset;
@@ -990,10 +994,26 @@ export class Player {
     const bobX      = Math.cos(this.moveTime * 5)  * 0.005 * this.bobAmp * bobFactor;
     const bobY      = Math.sin(this.moveTime * 10) * 0.005 * this.bobAmp * bobFactor;
 
-    // Sniper HIP = (0.22, -0.16, -0.65) → confirmed correct by user.
-    // M4A1 uses same HIP. ADS keeps same Y as HIP so gun doesn't jump up.
+    // OBJ analysis (m4a1.obj, scale=0.01557):
+    //   Gun length (Z) = 0.550 units after scale
+    //   After group rot Y=PI: world_z = group_z - gun_local_z
+    //   Muzzle world_z = group_z - 0.5726
+    //   Breech world_z = group_z - 0.0226
+    //
+    // To put MUZZLE at z=-0.35 (comfortable 1P distance):
+    //   group_z = -0.35 + 0.5726 = +0.2226
+    //
+    // To put GRIP at y=-0.20 (bottom-right of screen):
+    //   gun Y range = group_y + 0.0625 ~ group_y + 0.2352
+    //   group_y = -0.20 - 0.0625 = -0.2625
+
+    // M4A1 specific (calculated from OBJ)
+    const M4_HIP_X = 0.22,  M4_HIP_Y = -0.26, M4_HIP_Z =  0.22;
+    const M4_ADS_X = 0.00,  M4_ADS_Y = -0.26, M4_ADS_Z =  0.30; // same Y, just center X, pull muzzle a bit closer
+
+    // Sniper HIP confirmed correct by user — use same formula
     const HIP_X = 0.22,  HIP_Y = -0.16, HIP_Z = -0.65;
-    const ADS_X = 0.00,  ADS_Y = -0.16, ADS_Z = -0.50;  // Y same as HIP, just center X + pull closer
+    const ADS_X = 0.00,  ADS_Y = -0.16, ADS_Z = -0.50;
 
     // ── Grenade ──
     if (this.weaponSlot === 4) {
@@ -1042,17 +1062,18 @@ export class Player {
     let reloadY = 0, reloadRX = 0, reloadRZ = 0;
     if (this.isReloading) {
       const prog = 1 - (this.reloadTimer / this.reloadDuration);
-      reloadY  = -Math.sin(prog * Math.PI) * 0.18;
-      reloadRX =  Math.sin(prog * Math.PI) * 20;
-      reloadRZ =  Math.sin(prog * Math.PI) * 10;
+      // Reload: dip gun down and rotate forward
+      reloadY  = -Math.sin(prog * Math.PI) * 0.12;
+      reloadRX =  Math.sin(prog * Math.PI) * 25;
+      reloadRZ =  Math.sin(prog * Math.PI) * 8;
     }
 
     this._fpWeaponGroup.position.set(
-      HIP_X + (ADS_X - HIP_X) * ads + bobX,
-      HIP_Y + (ADS_Y - HIP_Y) * ads + recoilY + bobY + reloadY,
-      HIP_Z + (ADS_Z - HIP_Z) * ads + recoilZ
+      M4_HIP_X + (M4_ADS_X - M4_HIP_X) * ads + bobX,
+      M4_HIP_Y + (M4_ADS_Y - M4_HIP_Y) * ads + recoilY + bobY + reloadY,
+      M4_HIP_Z + (M4_ADS_Z - M4_HIP_Z) * ads + recoilZ
     );
-    // Preserve Y=PI (set at init), only animate X/Z for reload
+    // Preserve group Y=PI rotation, only animate X/Z for reload
     this._fpWeaponGroup.rotation.x = THREE.MathUtils.degToRad(reloadRX);
     this._fpWeaponGroup.rotation.z = THREE.MathUtils.degToRad(reloadRZ);
   }
