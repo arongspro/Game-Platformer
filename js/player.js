@@ -161,11 +161,11 @@ export class Player {
     this._fpGrenadeGroup = new THREE.Group();
     this._fpGrenadeGroup.visible = false;
     const gGeo = new THREE.SphereGeometry(0.07, 8, 8);
-    const gMat = new THREE.MeshLambertMaterial({ color: 0x2d4a1e });
+    const gMat = new THREE.MeshStandardMaterial({ color: 0x2d4a1e, roughness: 0.8, metalness: 0.2 });
     const gMesh = new THREE.Mesh(gGeo, gMat);
     // Pin
     const pinGeo = new THREE.CylinderGeometry(0.005, 0.005, 0.06, 6);
-    const pinMat = new THREE.MeshLambertMaterial({ color: 0xdddddd });
+    const pinMat = new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.3, metalness: 0.9 });
     const pin = new THREE.Mesh(pinGeo, pinMat);
     pin.position.set(0.04, 0.07, 0);
     pin.rotation.z = Math.PI / 4;
@@ -176,12 +176,12 @@ export class Player {
     // ── 1P sniper group (simple box model) ──
     this._fpSniperGroup = new THREE.Group();
     this._fpSniperGroup.visible = false;
-    const sMat  = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
-    const sMat2 = new THREE.MeshLambertMaterial({ color: 0x333333 });
+    const sMat  = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.5, metalness: 0.8 });
+    const sMat2 = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.6, metalness: 0.7 });
     const sBody   = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.07, 0.70), sMat);
     const sBarrel = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.025, 0.30), sMat2);
     sBarrel.position.set(0, 0.015, -0.50);
-    const sScope = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.20, 8), new THREE.MeshLambertMaterial({ color: 0x111111 }));
+    const sScope = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.20, 8), new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.3, metalness: 0.9 }));
     sScope.rotation.x = Math.PI / 2;
     sScope.position.set(0, 0.06, 0.0);
     const sGrip = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.12, 0.05), sMat2);
@@ -193,11 +193,11 @@ export class Player {
     // ── 1P pistol group ──
     this._fpPistolGroup = new THREE.Group();
     this._fpPistolGroup.visible = false;
-    const pMat3  = new THREE.MeshLambertMaterial({ color: 0x2a2a2a });
+    const pMat3  = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.5, metalness: 0.8 });
     const pBody   = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.10, 0.18), pMat3);
     const pBarrel = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.10), pMat3);
     pBarrel.position.set(0, 0.015, -0.14);
-    const pGrip2 = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.12, 0.055), new THREE.MeshLambertMaterial({ color: 0x3a2a1a }));
+    const pGrip2 = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.12, 0.055), new THREE.MeshStandardMaterial({ color: 0x3a2a1a, roughness: 0.9, metalness: 0.1 }));
     pGrip2.position.set(0, -0.10, 0.06);
     this._fpPistolGroup.add(pBody, pBarrel, pGrip2);
     this._fpPistolGroup.position.set(0.20, -0.55, -0.45);
@@ -214,20 +214,24 @@ export class Player {
   // OBJ load
   // ─────────────────────────────────────────
   _loadGun(renderer) {
-    const loader  = new OBJLoader();
-    const gunMat  = new THREE.MeshLambertMaterial({
-      color: 0x1a1a1a,
-      map: renderer.getTexWeapon(),
+    const loader = new OBJLoader();
+    // MeshStandardMaterial gives proper light/shadow (PBR)
+    const gunMat = new THREE.MeshStandardMaterial({
+      color:     0x2a2a2a,
+      roughness: 0.55,
+      metalness: 0.80,
+      map: renderer.getTexWeapon?.() || null,
     });
 
     loader.load(
-      './m4a1.obj',          // Path relative to index.html
+      './m4a1.obj',
       (obj) => {
-        // Unified material + shadow
+        // Apply PBR material + shadow to every mesh
         obj.traverse(child => {
           if (child.isMesh) {
-            child.material  = gunMat.clone();
+            child.material   = gunMat.clone();
             child.castShadow = true;
+            child.receiveShadow = false;
           }
         });
 
@@ -243,9 +247,9 @@ export class Player {
         const scale = 0.65 / maxDim;
         const gun1P = obj.clone(true);
         gun1P.scale.setScalar(scale);
-        // Center to origin. No Y rotation needed — camera local -Z is forward.
+        // Center to origin. Rotate 180° on Y to face muzzle toward -Z (camera forward).
         gun1P.position.set(-center.x * scale, -center.y * scale, -center.z * scale);
-        gun1P.rotation.set(0, 0, 0);
+        gun1P.rotation.set(0, Math.PI, 0);
         this._fpWeaponGroup.add(gun1P);
         this._gunMesh1P = gun1P;
 
@@ -274,7 +278,7 @@ export class Player {
 
   // Box fallback gun when OBJ load fails
   _buildFallbackGun(renderer) {
-    const gMat = new THREE.MeshLambertMaterial({ color: 0x222222, map: renderer.getTexWeapon() });
+    const gMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5, metalness: 0.8, map: renderer.getTexWeapon?.() || null });
     const g1 = new THREE.Group();
     g1.add(new THREE.Mesh(new THREE.BoxGeometry(0.06,0.08,0.5),  gMat));
     const grip = new THREE.Mesh(new THREE.BoxGeometry(0.05,0.12,0.06), gMat);
@@ -692,7 +696,7 @@ export class Player {
 
     } else if (this.weaponSlot === 3) {
       // Bandage: hold left-click 1.5s → heal 30 HP
-      if (mouse.left && this.bandageCount > 0 && this.health < this.maxHealth && !this.isBandaging && this.canUseBaseAction?.()) {
+      if (mouse.left && this.bandageCount > 0 && this.health < this.maxHealth && !this.isBandaging) {
         this.isBandaging  = true;
         this.bandageTimer = this.bandageDuration;
       }
