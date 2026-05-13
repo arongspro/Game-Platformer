@@ -232,12 +232,13 @@ export class Network {
   }
 
   sendUpdate(snapshot) {
-    if (!this.myUid) return;
+    if (!this.myUid || !this._authReady()) return;
     const now = Date.now();
     if (now - this._lastSend < SEND_INTERVAL) return;
     this._lastSend = now;
     const pos = posToObj(snapshot.pos);
-    set(ref(this.db, `players/${this.myUid}`), { pos, nickname: this.nickname, ts: serverTimestamp() }).catch(() => {});
+    set(ref(this.db, `players/${this.myUid}`), { pos, nickname: this.nickname, ts: serverTimestamp() })
+      .catch(e => { if (e.code !== 'PERMISSION_DENIED') console.warn('[Network] sendUpdate/players:', e.message); });
     set(ref(this.db, this._path(`state/${this.myUid}`)), {
       pos,
       nickname:    this.nickname,
@@ -255,7 +256,7 @@ export class Network {
       recoil:      snapshot.recoil,
       is_aiming:   snapshot.is_aiming,
       ts:          now,
-    }).catch(() => {});
+    }).catch(e => { if (e.code !== 'PERMISSION_DENIED') console.warn('[Network] sendUpdate/state:', e.message); });
     update(ref(this.db, this._path('meta')), {
       updatedAt: now,
       status: this.roomStatus === 'ended' ? 'ended' : 'playing',
