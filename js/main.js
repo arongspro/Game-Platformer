@@ -577,9 +577,13 @@ player.onShoot     = () => {
 player.onHudUpdate = updateHud;
 player.onDie = () => {
   deathScreen.classList.add('active');
-  setTimeout(() => deathScreen.classList.remove('active'), 1500);
+  setTimeout(() => {
+    deathScreen.classList.remove('active');
+    // 죽고 나서 자동으로 포인터락 재획득 시도
+    tryLock();
+  }, 1500);
   network.sendRespawn(player.pos.toArray());
-  player.health = 100;
+  // health reset은 player.js 내부에서 이미 처리 — 중복 제거
   updateHud();
 };
 
@@ -739,8 +743,12 @@ window.addEventListener('keydown', e => {
 // Chat input key handling
 chatInputEl.addEventListener('keydown', e => {
   e.stopPropagation();
-  if (e.code === 'Enter') { e.preventDefault(); submitChat(); }
-  if (e.code === 'Escape') { e.preventDefault(); closeChat(); }
+  e.stopImmediatePropagation();
+  // e.code can be unreliable on some Korean/IME keyboards — use e.key as fallback
+  const isEnter  = e.code === 'Enter'  || e.key === 'Enter';
+  const isEscape = e.code === 'Escape' || e.key === 'Escape';
+  if (isEnter)  { e.preventDefault(); submitChat(); return; }
+  if (isEscape) { e.preventDefault(); closeChat();  return; }
 });
 
 // Start chat listener
@@ -768,11 +776,12 @@ function loop() {
     }
   }
 
-  if (isLocked()) {
-    player.update(camCtrl, checkHit, dt);
-    camCtrl.update(player.pos, player.isSliding, player.bobAmp,
-                   player.moveTime, player.isJumping, player.currentRoll);
+  // 물리/입력은 포인터락 여부와 무관하게 항상 실행 (죽어도 멈추지 않음)
+  player.update(camCtrl, isLocked() ? checkHit : null, dt);
+  camCtrl.update(player.pos, player.isSliding, player.bobAmp,
+                 player.moveTime, player.isJumping, player.currentRoll);
 
+  if (isLocked()) {
     adsVignette.style.opacity = player.adsProgress;
 
     const weapon      = player.getLoadoutWeapon();
