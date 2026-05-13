@@ -971,9 +971,8 @@ export class Player {
     const equipped = this.getLoadoutWeapon();
 
     const slot     = this.weaponSlot;
-    const isSniper = equipped.scope && slot === 2;
 
-    // ── Hide every group first, then show only the active one ──
+    // ── Hide every group first, show only active slot ──
     this._fpWeaponGroup.visible  = false;
     this._fpGrenadeGroup.visible = false;
     if (this._fpSniperGroup) this._fpSniperGroup.visible = false;
@@ -981,11 +980,13 @@ export class Player {
 
     if (!fp) return;
 
-    // Show only the selected slot
     if (slot === 1) this._fpWeaponGroup.visible  = true;
     if (slot === 4) this._fpGrenadeGroup.visible = true;
-    if (slot === 2 && this._fpSniperGroup) this._fpSniperGroup.visible = true;
     if (slot === 5 && this._fpPistolGroup) this._fpPistolGroup.visible = true;
+    // Sniper: hide model when fully scoped (scope overlay takes over)
+    if (slot === 2 && this._fpSniperGroup) {
+      this._fpSniperGroup.visible = this.scopeProgress < 0.85;
+    }
 
     const ads       = this.adsProgress;
     const recoilZ   = this.recoilOffset;
@@ -994,24 +995,17 @@ export class Player {
     const bobX      = Math.cos(this.moveTime * 5)  * 0.005 * this.bobAmp * bobFactor;
     const bobY      = Math.sin(this.moveTime * 10) * 0.005 * this.bobAmp * bobFactor;
 
-    // OBJ analysis (m4a1.obj, scale=0.01557):
-    //   Gun length (Z) = 0.550 units after scale
-    //   After group rot Y=PI: world_z = group_z - gun_local_z
-    //   Muzzle world_z = group_z - 0.5726
-    //   Breech world_z = group_z - 0.0226
+    // OBJ analysis (m4a1, scale=0.01557, length=0.55):
+    //   world_z = group_z - gun_z  (after Y=PI group rotation)
+    //   muzzle world_z = group_z - 0.573
+    //   breech world_z = group_z - 0.023
     //
-    // To put MUZZLE at z=-0.35 (comfortable 1P distance):
-    //   group_z = -0.35 + 0.5726 = +0.2226
-    //
-    // To put GRIP at y=-0.20 (bottom-right of screen):
-    //   gun Y range = group_y + 0.0625 ~ group_y + 0.2352
-    //   group_y = -0.20 - 0.0625 = -0.2625
+    // M4_HIP_Z=0.05 → muzzle at 0.05-0.573 = -0.52  (comfortable 1P view)
+    // M4_ADS_Z=0.15 → muzzle at 0.15-0.573 = -0.42  (slightly closer when aiming)
+    const M4_HIP_X = 0.22,  M4_HIP_Y = -0.26, M4_HIP_Z =  0.05;
+    const M4_ADS_X = 0.00,  M4_ADS_Y = -0.26, M4_ADS_Z =  0.15;
 
-    // M4A1 specific (calculated from OBJ)
-    const M4_HIP_X = 0.22,  M4_HIP_Y = -0.26, M4_HIP_Z =  0.22;
-    const M4_ADS_X = 0.00,  M4_ADS_Y = -0.26, M4_ADS_Z =  0.30; // same Y, just center X, pull muzzle a bit closer
-
-    // Sniper HIP confirmed correct by user — use same formula
+    // Sniper/pistol box models — HIP confirmed correct by user
     const HIP_X = 0.22,  HIP_Y = -0.16, HIP_Z = -0.65;
     const ADS_X = 0.00,  ADS_Y = -0.16, ADS_Z = -0.50;
 
