@@ -268,13 +268,15 @@ export class Player {
         // Y: shift down so grip (min.y) is near y=0
         //   offset.y = -box3.min.y * scale  → grip sits at y=0
 
+        // Keep gun1P centered on X only. Y/Z offsets removed so that
+        // _fpWeaponGroup.position directly maps to screen coords (no surprise shifts at ADS).
         gun1P.position.set(
-          center.x * scale,           // X: mirror-correct centering after Y=PI rot
-         -box3.min.y * scale,         // Y: lift so grip base is at y=0
-          center.z * scale            // Z: center gun depth; muzzle reaches -halfZ·scale
+          center.x * scale,  // X mirror-correct after Y=PI group rotation
+          0,                 // Y: no internal offset — group Y controls height
+          0                  // Z: no internal offset — group Z controls depth
         );
-        gun1P.rotation.set(0, 0, 0);                     // no rotation on mesh
-        this._fpWeaponGroup.rotation.set(0, Math.PI, 0); // rotate the GROUP so +X = right everywhere
+        gun1P.rotation.set(0, 0, 0);
+        this._fpWeaponGroup.rotation.set(0, Math.PI, 0);
         this._fpWeaponGroup.add(gun1P);
         this._gunMesh1P = gun1P;
 
@@ -972,15 +974,15 @@ export class Player {
     const isSniper = equipped.scope && slot === 2;
     const isPistol = slot === 5;
 
-    // Show exactly one group at a time — no overlap
-    this._fpWeaponGroup.visible  = fp && slot === 1;                       // M4A1 only
+    // Show exactly one group at a time
+    this._fpWeaponGroup.visible  = fp && slot === 1;
     this._fpGrenadeGroup.visible = fp && slot === 4;
-    if (this._fpSniperGroup) this._fpSniperGroup.visible = fp && isSniper;
-    if (this._fpPistolGroup) this._fpPistolGroup.visible = fp && isPistol;
+    // Sniper/pistol: only show when that slot is SELECTED
+    if (this._fpSniperGroup) this._fpSniperGroup.visible = fp && slot === 2 && !!equipped.scope;
+    if (this._fpPistolGroup) this._fpPistolGroup.visible = fp && slot === 5;
 
     if (!fp) return;
 
-    // ── Common values ──
     const ads       = this.adsProgress;
     const recoilZ   = this.recoilOffset;
     const recoilY   = this.recoilOffset * 0.08;
@@ -988,10 +990,10 @@ export class Player {
     const bobX      = Math.cos(this.moveTime * 5)  * 0.005 * this.bobAmp * bobFactor;
     const bobY      = Math.sin(this.moveTime * 10) * 0.005 * this.bobAmp * bobFactor;
 
-    // All groups use the same coordinate system now (group rotation handles -Z facing)
-    // +X = right side of screen for ALL weapons
-    const HIP_X = 0.22,  HIP_Y = -0.16, HIP_Z = -0.50;
-    const ADS_X = 0.00,  ADS_Y =  0.00, ADS_Z = -0.40;
+    // Sniper HIP = (0.22, -0.16, -0.65) → confirmed correct by user.
+    // M4A1 uses same HIP. ADS keeps same Y as HIP so gun doesn't jump up.
+    const HIP_X = 0.22,  HIP_Y = -0.16, HIP_Z = -0.65;
+    const ADS_X = 0.00,  ADS_Y = -0.16, ADS_Z = -0.50;  // Y same as HIP, just center X + pull closer
 
     // ── Grenade ──
     if (this.weaponSlot === 4) {
