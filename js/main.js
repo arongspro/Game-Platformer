@@ -636,6 +636,8 @@ player.grenadeSystem.onExplode = (pos, radius, maxDamage, meta = {}) => {
 };
 
 player.onBandageUsed = () => {
+  // 붕대 완료 후 network.myHealth를 실제 체력과 동기화
+  network.myHealth = player.health;
   addKillfeed('🩹 Bandage used! +30 HP');
   updateHud();
 };
@@ -741,9 +743,18 @@ network.onPlayersUpdate = (others) => {
 
 network.onHealthUpdate = (hp) => {
   if (network.isInvincible()) return;
-  // Bug fix: 붕대 사용 중에 network hp로 덮어쓰면 힐 효과가 사라짐 → 무시
-  if (player.isBandaging) return;
-  player.health = hp;
+  if (player.isBandaging) {
+    // 붕대 중 피격: player.health 기준으로 데미지를 계산해 적용
+    // (network.myHealth는 붕대 이전 값 기준이므로 차이를 구해 player.health에서 뺌)
+    const dmg = network.myHealth - hp;
+    if (dmg > 0) {
+      player.health = Math.max(0, player.health - dmg);
+      network.myHealth = hp; // network 쪽도 동기화
+    }
+  } else {
+    player.health = hp;
+    network.myHealth = hp;
+  }
   updateHud();
   dmgFlash.classList.add('active');
   pulseHitEffect(false);
