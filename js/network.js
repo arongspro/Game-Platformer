@@ -98,6 +98,11 @@ export class Network {
 
   _setupListeners() {
     this._clearListeners();
+    // presence는 최초 1회만 등록
+    if (!this._presenceRegistered) {
+      this._presenceRegistered = true;
+      this._registerPresenceInternal();
+    }
     this._chatSince = Date.now() - 100;
 
     const statePath = this._path('state');
@@ -383,15 +388,26 @@ export class Network {
 
   // ── Presence: 온라인 플레이어 목록 ──
   registerPresence() {
+    // myUid가 이미 있으면 즉시, 없으면 _setupListeners에서 자동 호출됨
+    if (this.myUid && !this._presenceRegistered) {
+      this._presenceRegistered = true;
+      this._registerPresenceInternal();
+    }
+    // duel requests도 동일하게 처리
+    if (this.myUid && !this._duelListenRegistered) {
+      this._duelListenRegistered = true;
+      this._listenDuelInternal();
+    }
+  }
+
+  _registerPresenceInternal() {
     if (!this.myUid) return;
     const presRef = ref(this.db, `presence/${this.myUid}`);
     set(presRef, { nickname: this.nickname, uid: this.myUid, ts: Date.now() });
     onDisconnect(presRef).remove();
-    // 30초마다 heartbeat
     this._presenceInterval = setInterval(() => {
       set(presRef, { nickname: this.nickname, uid: this.myUid, ts: Date.now() }).catch(() => {});
     }, 30000);
-    // 온라인 목록 구독
     onValue(ref(this.db, 'presence'), snap => {
       const now = Date.now();
       const data = snap.val() || {};
@@ -402,17 +418,14 @@ export class Network {
     });
   }
 
-  // ── Duel: 1v1 도전 ──
-  sendDuelRequest(targetUid, targetNick) {
-    if (!this.myUid) return;
-    this.duelState    = 'pending_sent';
-    this.duelOpponent = { uid: targetUid, nickname: targetNick };
-    set(ref(this.db, `duels/requests/${targetUid}`), {
-      fromUid: this.myUid, fromNick: this.nickname, ts: Date.now(),
-    }).catch(() => {});
+  listenDuelRequests() {
+    if (this.myUid && !this._duelListenRegistered) {
+      this._duelListenRegistered = true;
+      this._listenDuelInternal();
+    }
   }
 
-  listenDuelRequests() {
+  _listenDuelInternal() {
     if (!this.myUid) return;
     onValue(ref(this.db, `duels/requests/${this.myUid}`), snap => {
       const d = snap.val();
@@ -423,7 +436,6 @@ export class Network {
       this.duelOpponent = { uid: d.fromUid, nickname: d.fromNick };
       this.onDuelRequest?.(d.fromUid, d.fromNick);
     });
-    // 내 요청에 대한 응답 감시
     onValue(ref(this.db, `duels/responses/${this.myUid}`), snap => {
       const d = snap.val();
       if (!d) return;
@@ -439,6 +451,14 @@ export class Network {
         this.onDuelDeclined?.();
       }
     });
+  }
+  sendDuelRequest(targetUid, targetNick) {
+    if (!this.myUid) return;
+    this.duelState    = 'pending_sent';
+    this.duelOpponent = { uid: targetUid, nickname: targetNick };
+    set(ref(this.db, `duels/requests/${targetUid}`), {
+      fromUid: this.myUid, fromNick: this.nickname, ts: Date.now(),
+    }).catch(() => {});
   }
 
   acceptDuel() {
