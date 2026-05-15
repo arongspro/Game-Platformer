@@ -255,6 +255,7 @@ export class Network {
       is_sliding:  snapshot.is_sliding,
       recoil:      snapshot.recoil,
       is_aiming:   snapshot.is_aiming,
+      grenades:    snapshot.grenades || [],
       ts:          now,
     }).catch(e => { if (e.code !== 'PERMISSION_DENIED') console.warn('[Network] sendUpdate/state:', e.message); });
     update(ref(this.db, this._path('meta')), {
