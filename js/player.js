@@ -125,7 +125,7 @@ export class Player {
     // RPG
     this.rpgCount       = 1;       // 현재 장탄
     this.maxRpgCount    = 1;
-    this.rpgReserve     = 3;       // 예비탄
+    this.rpgReserve     = 12;      // 예비탄
     this.rpgReloading   = false;
     this.rpgReloadTimer = 0;
     this.rpgReloadDur   = 110;
@@ -660,6 +660,18 @@ export class Player {
     const shouldFire = weapon.auto ? this.mouse.left : !this.mouseLeftHeld;
     if (!shouldFire) return;
 
+    // RPG: 로켓 발사체 처리
+    if (weapon.isProjectile) {
+      if (this._camCtrlRef) this._fireRocket(this._camCtrlRef);
+      state.ammo--;
+      state.cooldown = weapon.fireRate;
+      this.recoilOffset = weapon.recoil;
+      if (this.onHudUpdate) this.onHudUpdate();
+      if (!weapon.auto) this.mouseLeftHeld = true;
+      if (state.ammo === 0 && state.reserve > 0) this.startReload();
+      return;
+    }
+
     state.ammo--;
     state.cooldown = weapon.fireRate;
     this.recoilOffset = weapon.recoil;
@@ -735,6 +747,7 @@ export class Player {
     // Scale normalised to 60fps (FPS-independent physics)
     const scale = dt * 60;
     const keys = this.keys, mouse = this.mouse;
+    this._camCtrlRef = camCtrl; // RPG 발사용 카메라 참조 저장
 
     // ADS
     this.isAiming    = mouse.right && !this.isReloading;
@@ -773,8 +786,6 @@ export class Player {
     if (!keys['Digit5']) this._slot5Held = false;
     if (keys['Digit4'] && !this._slot4Held && this.grenadeCount > 0 && canSwitchWeapon) { this.weaponSlot = 4; this._slot4Held = true; if (this.onHudUpdate) this.onHudUpdate(); }
     if (!keys['Digit4']) this._slot4Held = false;
-    if (keys['Digit6'] && !this._slot6Held && (this.rpgCount > 0 || this.rpgReserve > 0) && canSwitchWeapon) { this.weaponSlot = 6; this._slot6Held = true; if (this.onHudUpdate) this.onHudUpdate(); }
-    if (!keys['Digit6']) this._slot6Held = false;
     if (keys['Digit3'] && !this._slot3Held && this.bandageCount > 0 && !this.isReloading) { this.weaponSlot = 3; this._slot3Held = true; if (this.onHudUpdate) this.onHudUpdate(); }
     if (!keys['Digit3']) this._slot3Held = false;
 
@@ -891,28 +902,6 @@ export class Player {
         if (this.onHudUpdate) this.onHudUpdate();
       }
       this.isBandaging = false;
-
-    } else if (this.weaponSlot === 6) {
-      // RPG: 클릭 시 로켓 발사, 재장전 필요
-      this.isChargingGrenade = false;
-      this.grenadeCharge     = 0;
-      this.isBandaging       = false;
-      if (mouse.left && !this.mouseLeftHeld) {
-        if (this.rpgCount > 0 && !this.rpgReloading && this.rpgFireCd <= 0) {
-          this._fireRocket(camCtrl);
-          this.rpgFireCd = getWeaponById('rpg').fireRate;
-          this.mouseLeftHeld = true;
-          if (this.onHudUpdate) this.onHudUpdate();
-        }
-      }
-      if (!mouse.left) this.mouseLeftHeld = false;
-      this.rpgFireCd = Math.max(0, this.rpgFireCd - scale);
-      // 자동 재장전
-      if (this.rpgCount === 0 && !this.rpgReloading && this.rpgReserve > 0) {
-        this.rpgReloading   = true;
-        this.rpgReloadTimer = this.rpgReloadDur;
-        if (this.onHudUpdate) this.onHudUpdate();
-      }
 
     } else if (this.weaponSlot === 3) {
       // Bandage: hold left-click 1.5s → heal 30 HP
@@ -1097,7 +1086,7 @@ export class Player {
       this._syncWeaponStats();
       this.grenadeCount = this.maxGrenades;
       this.rpgCount     = this.maxRpgCount;
-      this.rpgReserve   = 3;
+      this.rpgReserve   = 12;
       this.rpgReloading = false;
       this._rockets     = [];
       this.bandageCount = 0;          // Bandage lost on death
@@ -1195,9 +1184,6 @@ export class Player {
     // ── Show only active weapon group ──
     if (slot === 4) {
       this._fpGrenadeGroup.visible = true;
-    } else if (slot === 6) {
-      const grp = this._fpGroups?.['rpg'];
-      if (grp) grp.visible = true;
     } else if (slot !== 3) {
       const grp = this._fpGroups?.[wid];
       if (grp) grp.visible = !(isScope && this.scopeProgress >= 0.85);
@@ -1409,7 +1395,6 @@ export class Player {
       _trailTimer: 0,
     };
 
-    this.rpgCount--;
     this._rockets.push(rocket);
     this.onRocketFire?.(rocket);
   }
