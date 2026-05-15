@@ -595,6 +595,9 @@ player.grenadeSystem.getContactTargets = () => [
 ];
 
 player.grenadeSystem.onExplode = (pos, radius, maxDamage, meta = {}) => {
+  // 다른 플레이어에게 폭발 이펙트 전송
+  network.sendExplosion([pos.x, pos.y, pos.z], 'grenade');
+
   // Screen shake based on my position
   const myCenter = player.pos.clone(); myCenter.y += 0.9;
   const myDist = myCenter.distanceTo(pos);
@@ -668,6 +671,9 @@ player.onRocketHitCheck = (prevPos, nextPos) => {
 
 // 로켓 폭발 처리
 player.onRocketExplode = (pos, hitPlayer = false) => {
+  // 다른 플레이어에게 RPG 폭발 이펙트 전송
+  network.sendExplosion([pos.x, pos.y, pos.z], 'rpg');
+
   // 폭발 비주얼
   renderer.spawnRocketExplosion(pos);
 
@@ -712,6 +718,15 @@ player.onRocketExplode = (pos, hitPlayer = false) => {
 
   addKillfeed(hitPlayer ? '🚀 DIRECT HIT!' : '🚀 EXPLOSION!');
   updateHud();
+};
+
+network.onExplosion = (posArr, type) => {
+  const pos = new THREE.Vector3(posArr[0], posArr[1], posArr[2]);
+  if (type === 'rpg') {
+    renderer.spawnRocketExplosion(pos);
+  } else {
+    player.grenadeSystem?.spawnExplosion?.(pos);
+  }
 };
 
 network.onPlayersUpdate = (others) => {
