@@ -36,6 +36,18 @@ export class Network {
     this.otherPlayers = {};
     this.myHealth     = 100;
     this.currentMapId = 'spire';
+
+    // Duel system
+    this.duelState     = null;
+    this.duelOpponent  = null;
+    this.duelRoomId    = null;
+    this.duelStartTs   = null;
+    this.onDuelRequest  = null;
+    this.onDuelAccepted = null;
+    this.onDuelDeclined = null;
+    this.onDuelStart    = null;
+    this.onDuelEnd      = null;
+    this.onOnlinePlayers= null;
     this.roomId       = (localStorage.getItem('vp_room_id')   || 'PUBLIC').toUpperCase();
     this.roomName     = localStorage.getItem('vp_room_name')  || 'PUBLIC';
     this.matchLimit   = Number(localStorage.getItem('vp_match_limit') || 10);
@@ -368,4 +380,148 @@ export class Network {
   isInvincible()   { return Date.now() - this._respawnTime < this._invincibleDuration; }
   _authReady()     { return !!this.auth.currentUser && this.auth.currentUser.uid === this.myUid; }
   getPlayerCount() { return Object.keys(this.otherPlayers).length + 1; }
+
+  // ── Presence: 온라인 플레이어 목록 ──
+  registerPresence() {
+    if (!this.myUid) return;
+    const presRef = ref(this.db, `presence/${this.myUid}`);
+    set(presRef, { nickname: this.nickname, uid: this.myUid, ts: Date.now() });
+    onDisconnect(presRef).remove();
+    // 30초마다 heartbeat
+    this._presenceInterval = setInterval(() => {
+      set(presRef, { nickname: this.nickname, uid: this.myUid, ts: Date.now() }).catch(() => {});
+    }, 30000);
+    // 온라인 목록 구독
+    onValue(ref(this.db, 'presence'), snap => {
+      const now = Date.now();
+      const data = snap.val() || {};
+      const players = Object.entries(data)
+        .filter(([uid, info]) => uid !== this.myUid && info?.nickname && (now - (info.ts || 0) < 90000))
+        .map(([uid, info]) => ({ uid, nickname: info.nickname }));
+      this.onOnlinePlayers?.(players);
+    });
+  }
+
+  // ── Duel: 1v1 도전 ──
+  sendDuelRequest(targetUid, targetNick) {
+    if (!this.myUid) return;
+    this.duelState    = 'pending_sent';
+    this.duelOpponent = { uid: targetUid, nickname: targetNick };
+    set(ref(this.db, `duels/requests/${targetUid}`), {
+      fromUid: this.myUid, fromNick: this.nickname, ts: Date.now(),
+    }).catch(() => {});
+  }
+
+  listenDuelRequests() {
+    if (!this.myUid) return;
+    onValue(ref(this.db, `duels/requests/${this.myUid}`), snap => {
+      const d = snap.val();
+      if (!d) return;
+      if (Date.now() - d.ts > 30000) { remove(snap.ref); return; }
+      if (this.duelState && this.duelState !== 'pending_recv') return;
+      this.duelState    = 'pending_recv';
+      this.duelOpponent = { uid: d.fromUid, nickname: d.fromNick };
+      this.onDuelRequest?.(d.fromUid, d.fromNick);
+    });
+    // 내 요청에 대한 응답 감시
+    onValue(ref(this.db, `duels/responses/${this.myUid}`), snap => {
+      const d = snap.val();
+      if (!d) return;
+      remove(snap.ref);
+      if (d.status === 'accepted' && this.duelState === 'pending_sent') {
+        this.duelRoomId = d.roomId;
+        this.duelState  = 'picking';
+        this.onDuelAccepted?.();
+        this._startDuelRoom(d.roomId);
+      } else if (d.status === 'declined') {
+        this.duelState    = null;
+        this.duelOpponent = null;
+        this.onDuelDeclined?.();
+      }
+    });
+  }
+
+  acceptDuel() {
+    if (!this.duelOpponent) return;
+    const roomId = `DUEL_${Date.now().toString(36).toUpperCase()}`;
+    this.duelRoomId = roomId;
+    this.duelState  = 'picking';
+    remove(ref(this.db, `duels/requests/${this.myUid}`)).catch(() => {});
+    set(ref(this.db, `duels/responses/${this.duelOpponent.uid}`), {
+      status: 'accepted', roomId, ts: Date.now(),
+    }).catch(() => {});
+    this._startDuelRoom(roomId);
+  }
+
+  declineDuel() {
+    if (!this.duelOpponent) return;
+    set(ref(this.db, `duels/responses/${this.duelOpponent.uid}`), {
+      status: 'declined', ts: Date.now(),
+    }).catch(() => {});
+    remove(ref(this.db, `duels/requests/${this.myUid}`)).catch(() => {});
+    this.duelState    = null;
+    this.duelOpponent = null;
+  }
+
+  _startDuelRoom(roomId) {
+    // 듀얼룸 메타 감시 — 둘 다 ready 되면 start
+    onValue(ref(this.db, `duels/rooms/${roomId}`), snap => {
+      const d = snap.val();
+      if (!d) return;
+      if (d.status === 'active' && this.duelState === 'picking') {
+        this.duelState   = 'active';
+        this.duelStartTs = d.startTs;
+        this.onDuelStart?.(roomId);
+      }
+      if (d.status === 'ended') {
+        this.duelState = 'ended';
+        this.onDuelEnd?.(d.winnerNick);
+      }
+    });
+  }
+
+  markDuelReady(loadout) {
+    if (!this.duelRoomId || !this.myUid) return;
+    // ready 정보를 직접 update (set 대신)
+    update(ref(this.db, `duels/rooms/${this.duelRoomId}/ready`), {
+      [this.myUid]: { nickname: this.nickname, loadout, ts: Date.now() },
+    }).then(() => get(ref(this.db, `duels/rooms/${this.duelRoomId}/ready`)))
+      .then(snap => {
+        const r = snap.val() || {};
+        if (Object.keys(r).length >= 2) {
+          // 둘 다 ready — 시작
+          update(ref(this.db, `duels/rooms/${this.duelRoomId}`), {
+            status: 'active', startTs: Date.now() + 500,
+          }).catch(() => {});
+        } else {
+          // 첫 번째 ready — room status 초기화
+          update(ref(this.db, `duels/rooms/${this.duelRoomId}`), {
+            status: 'waiting',
+          }).catch(() => {});
+        }
+      }).catch(() => {});
+  }
+
+  sendDuelKill(roomId, killerUid, killerNick) {
+    if (!roomId) return;
+    const scoreRef = ref(this.db, `duels/rooms/${roomId}/score/${killerUid}`);
+    get(scoreRef).then(snap => {
+      const cur = snap.val() || 0;
+      set(scoreRef, cur + 1);
+    });
+    update(ref(this.db, `duels/rooms/${roomId}`), { lastKillNick: killerNick });
+  }
+
+  endDuel(roomId, winnerNick) {
+    if (!roomId) return;
+    update(ref(this.db, `duels/rooms/${roomId}`), {
+      status: 'ended', winnerNick, endedAt: Date.now(),
+    }).catch(() => {});
+  }
+
+  listenDuelScore(roomId, cb) {
+    return onValue(ref(this.db, `duels/rooms/${roomId}/score`), snap => {
+      cb(snap.val() || {});
+    });
+  }
 }
