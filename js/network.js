@@ -95,6 +95,7 @@ export class Network {
     this._ensureRoomMeta();
 
     // Players
+    this._processedExplosions = this._processedExplosions || new Set();
     this._unsubs.push(onValue(ref(this.db, statePath), snap => {
       const data = snap.val() || {};
       const now  = Date.now();
@@ -104,6 +105,16 @@ export class Network {
         if (info.ts && now - info.ts > STALE_TIMEOUT) continue;
         others[uid] = { ...info, pos: posToArr(info.pos) };
         if (info.health_reset) this._targetHp[uid] = 100;
+
+        // 폭발 이벤트 처리 — lastExplosion.ts 기반으로 중복 방지
+        const e = info.lastExplosion;
+        if (e?.ts && now - e.ts < 3000) {
+          const eKey = `${uid}_${e.ts}`;
+          if (!this._processedExplosions.has(eKey)) {
+            this._processedExplosions.add(eKey);
+            this.onExplosion?.([e.x ?? 0, e.y ?? 0, e.z ?? 0], e.type || 'grenade');
+          }
+        }
       }
       this.otherPlayers = others;
       this.onPlayersUpdate?.(others);
@@ -143,20 +154,6 @@ export class Network {
         this.onHealthUpdate?.(this.myHealth);
         this.onHit?.(h.damage || 15);
         remove(itemRef);
-      }
-    }));
-
-    // Explosions (grenade + RPG)
-    const exploPath = this._path('explosions');
-    this._unsubs.push(onValue(ref(this.db, exploPath), snap => {
-      if (!this.onExplosion) return;
-      const data = snap.val();
-      if (!data) return;
-      const now = Date.now();
-      for (const [key, e] of Object.entries(data)) {
-        if (!e?.ts || now - e.ts > 3000) continue;   // 3초 이상 오래된 이벤트 무시
-        if (e.uid === this.myUid) continue;            // 내가 보낸 폭발은 이미 로컬에서 처리
-        this.onExplosion([e.x ?? 0, e.y ?? 0, e.z ?? 0], e.type || 'grenade');
       }
     }));
 
@@ -250,6 +247,7 @@ export class Network {
     this.otherPlayers = {};
     this.kills  = 0;
     this.deaths = 0;
+    this._processedExplosions = new Set();
     this._setupListeners();
   }
 
@@ -340,14 +338,11 @@ export class Network {
   }
 
   sendExplosion(posArr, type = 'grenade') {
-    if (!this.myUid) return;
-    const key = `${this.myUid}_${Date.now()}`;
-    set(ref(this.db, this._path(`explosions/${key}`)), {
-      uid: this.myUid, x: posArr[0], y: posArr[1], z: posArr[2],
-      type, ts: Date.now(),
+    if (!this.myUid || !this._authReady()) return;
+    // 기존 state 경로에 lastExplosion 필드를 update — 별도 경로 불필요
+    update(ref(this.db, this._path(`state/${this.myUid}`)), {
+      lastExplosion: { x: posArr[0], y: posArr[1], z: posArr[2], type, ts: Date.now() },
     }).catch(() => {});
-    // 5초 후 자동 삭제 (Firebase Rules 없이 수동 cleanup)
-    setTimeout(() => remove(ref(this.db, this._path(`explosions/${key}`))).catch(() => {}), 5000);
   }
 
   sendChat(text) {
