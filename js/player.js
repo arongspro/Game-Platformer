@@ -122,6 +122,18 @@ export class Player {
     this._slot2Held   = false;
     this._slot5Held   = false;
 
+    // RPG
+    this.rpgCount       = 1;       // 현재 장탄
+    this.maxRpgCount    = 1;
+    this.rpgReserve     = 3;       // 예비탄
+    this.rpgReloading   = false;
+    this.rpgReloadTimer = 0;
+    this.rpgReloadDur   = 110;
+    this.rpgFireCd      = 0;
+    this._slot6Held     = false;
+    // 활성 로켓 목록 (로컬 발사)
+    this._rockets       = [];
+
     // Grenade system (requires renderer.scene, init later)
     this.grenadeSystem = null;
 
@@ -297,6 +309,51 @@ export class Player {
       const stock  = new THREE.Mesh(new THREE.BoxGeometry(0.042, 0.052, 0.12), std(0x2a2a2a));
       stock.position.set(0, 0.002, 0.25);
       g.add(body, barrel, grip, mag, stock);
+    });
+
+    // ── rpg ──
+    addGroup('rpg', g => {
+      // 발사관 (긴 원통)
+      const tube = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.045, 0.045, 0.70, 8),
+        std(0x4a3a28, 0.7, 0.3)
+      );
+      tube.rotation.x = Math.PI / 2;
+      tube.position.set(0, -0.01, -0.25);
+      // 탄두 (앞 원뿔)
+      const nose = new THREE.Mesh(
+        new THREE.ConeGeometry(0.044, 0.22, 8),
+        std(0x333333, 0.3, 0.8)
+      );
+      nose.rotation.x = Math.PI / 2;
+      nose.position.set(0, -0.01, -0.67);
+      // 손잡이
+      const grip = new THREE.Mesh(
+        new THREE.BoxGeometry(0.042, 0.13, 0.052),
+        std(0x2a1a0a, 0.9, 0.1)
+      );
+      grip.position.set(0, -0.11, -0.10);
+      // 후방 플레어 (원통)
+      const rear = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.055, 0.065, 0.12, 8),
+        std(0x555555, 0.4, 0.6)
+      );
+      rear.rotation.x = Math.PI / 2;
+      rear.position.set(0, -0.01, 0.21);
+      // 조준기
+      const sight = new THREE.Mesh(
+        new THREE.BoxGeometry(0.012, 0.06, 0.012),
+        std(0x111111, 0.5, 0.5)
+      );
+      sight.position.set(0, 0.07, -0.15);
+      // 글로우 (분사구)
+      const glow = new THREE.Mesh(
+        new THREE.SphereGeometry(0.04, 8, 8),
+        new THREE.MeshBasicMaterial({ color: 0xff6600, transparent: true, opacity: 0.0 })
+      );
+      glow.position.set(0, -0.01, 0.30);
+      g.add(tube, nose, grip, rear, sight, glow);
+      g._glow = glow;  // 발사 시 글로우 효과용
     });
 
     // ── grenade ──
@@ -716,6 +773,8 @@ export class Player {
     if (!keys['Digit5']) this._slot5Held = false;
     if (keys['Digit4'] && !this._slot4Held && this.grenadeCount > 0 && canSwitchWeapon) { this.weaponSlot = 4; this._slot4Held = true; if (this.onHudUpdate) this.onHudUpdate(); }
     if (!keys['Digit4']) this._slot4Held = false;
+    if (keys['Digit6'] && !this._slot6Held && (this.rpgCount > 0 || this.rpgReserve > 0) && canSwitchWeapon) { this.weaponSlot = 6; this._slot6Held = true; if (this.onHudUpdate) this.onHudUpdate(); }
+    if (!keys['Digit6']) this._slot6Held = false;
     if (keys['Digit3'] && !this._slot3Held && this.bandageCount > 0 && !this.isReloading) { this.weaponSlot = 3; this._slot3Held = true; if (this.onHudUpdate) this.onHudUpdate(); }
     if (!keys['Digit3']) this._slot3Held = false;
 
@@ -832,6 +891,28 @@ export class Player {
         if (this.onHudUpdate) this.onHudUpdate();
       }
       this.isBandaging = false;
+
+    } else if (this.weaponSlot === 6) {
+      // RPG: 클릭 시 로켓 발사, 재장전 필요
+      this.isChargingGrenade = false;
+      this.grenadeCharge     = 0;
+      this.isBandaging       = false;
+      if (mouse.left && !this.mouseLeftHeld) {
+        if (this.rpgCount > 0 && !this.rpgReloading && this.rpgFireCd <= 0) {
+          this._fireRocket(camCtrl);
+          this.rpgFireCd = getWeaponById('rpg').fireRate;
+          this.mouseLeftHeld = true;
+          if (this.onHudUpdate) this.onHudUpdate();
+        }
+      }
+      if (!mouse.left) this.mouseLeftHeld = false;
+      this.rpgFireCd = Math.max(0, this.rpgFireCd - scale);
+      // 자동 재장전
+      if (this.rpgCount === 0 && !this.rpgReloading && this.rpgReserve > 0) {
+        this.rpgReloading   = true;
+        this.rpgReloadTimer = this.rpgReloadDur;
+        if (this.onHudUpdate) this.onHudUpdate();
+      }
 
     } else if (this.weaponSlot === 3) {
       // Bandage: hold left-click 1.5s → heal 30 HP
@@ -955,6 +1036,21 @@ export class Player {
       }
     }
 
+    // RPG 재장전
+    if (this.rpgReloading) {
+      this.rpgReloadTimer -= scale;
+      if (this.rpgReloadTimer <= 0) {
+        this.rpgReloading = false;
+        const fill = Math.min(this.maxRpgCount - this.rpgCount, this.rpgReserve);
+        this.rpgCount   += fill;
+        this.rpgReserve -= fill;
+        if (this.onHudUpdate) this.onHudUpdate();
+      }
+    }
+
+    // RPG 로켓 물리 업데이트
+    this._updateRockets(dt);
+
     for (const [weaponId, state] of Object.entries(this.weaponStates)) {
       if (!state.reloading) continue;
       const weapon = getWeaponById(weaponId);
@@ -1000,6 +1096,10 @@ export class Player {
       }
       this._syncWeaponStats();
       this.grenadeCount = this.maxGrenades;
+      this.rpgCount     = this.maxRpgCount;
+      this.rpgReserve   = 3;
+      this.rpgReloading = false;
+      this._rockets     = [];
       this.bandageCount = 0;          // Bandage lost on death
       this.isBandaging  = false;
       this.isSliding    = false;
@@ -1095,6 +1195,9 @@ export class Player {
     // ── Show only active weapon group ──
     if (slot === 4) {
       this._fpGrenadeGroup.visible = true;
+    } else if (slot === 6) {
+      const grp = this._fpGroups?.['rpg'];
+      if (grp) grp.visible = true;
     } else if (slot !== 3) {
       const grp = this._fpGroups?.[wid];
       if (grp) grp.visible = !(isScope && this.scopeProgress >= 0.85);
@@ -1233,5 +1336,146 @@ export class Player {
     this.pos.addScaledVector(dir, 0.25);   // nerfed: was 0.35
     this.yVel = Math.max(this.yVel, dir.y * 0.30);  // nerfed: was 0.55
     this.isJumping = true;
+  }
+
+  // ── RPG 발사체 생성 ──
+  _fireRocket(camCtrl) {
+    if (!this.renderer) return;
+    const scene = this.renderer.scene;
+
+    const yawRad   = THREE.MathUtils.degToRad(camCtrl.yaw);
+    const pitchRad = THREE.MathUtils.degToRad(camCtrl.pitch);
+    const dir = new THREE.Vector3(
+      Math.cos(yawRad) * Math.cos(pitchRad),
+      Math.sin(pitchRad),
+      Math.sin(yawRad) * Math.cos(pitchRad)
+    ).normalize();
+
+    // 발사 위치: 카메라 위치에서 약간 앞
+    const spawnPos = this.pos.clone();
+    spawnPos.y += 1.5;
+    spawnPos.addScaledVector(dir, 0.6);
+
+    // ── 로켓 메시 (원통 몸체 + 원뿔 탄두) ──
+    const group = new THREE.Group();
+
+    // 몸체 (원통)
+    const bodyGeo = new THREE.CylinderGeometry(0.045, 0.045, 0.55, 8);
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.6, metalness: 0.4 });
+    const body    = new THREE.Mesh(bodyGeo, bodyMat);
+    body.rotation.x = Math.PI / 2;
+    group.add(body);
+
+    // 탄두 (원뿔, 앞)
+    const noseGeo = new THREE.ConeGeometry(0.045, 0.18, 8);
+    const noseMat = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.3, metalness: 0.8 });
+    const nose    = new THREE.Mesh(noseGeo, noseMat);
+    nose.rotation.x = Math.PI / 2;
+    nose.position.z = -0.37;  // 앞으로 (비행 방향)
+    group.add(nose);
+
+    // 날개 (4개)
+    const finMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.5, metalness: 0.5 });
+    for (let i = 0; i < 4; i++) {
+      const finGeo = new THREE.BoxGeometry(0.005, 0.14, 0.16);
+      const fin    = new THREE.Mesh(finGeo, finMat);
+      fin.rotation.z = (i * Math.PI) / 2;
+      fin.position.z = 0.22;  // 뒤쪽 날개
+      group.add(fin);
+    }
+
+    // 분사구 글로우
+    const exhaustGeo = new THREE.SphereGeometry(0.06, 8, 8);
+    const exhaustMat = new THREE.MeshBasicMaterial({ color: 0xff6600, transparent: true, opacity: 0.9 });
+    const exhaust    = new THREE.Mesh(exhaustGeo, exhaustMat);
+    exhaust.position.z = 0.30;
+    group.add(exhaust);
+
+    // 그룹 방향을 비행 방향으로 정렬
+    group.position.copy(spawnPos);
+    group.lookAt(spawnPos.clone().add(dir));
+    // lookAt은 +Z를 바라보도록 하므로 로켓 앞(nose)을 맞추기위해 Y축 180도 회전
+    group.rotateY(Math.PI);
+    scene.add(group);
+
+    const wpn = getWeaponById('rpg');
+    const rocket = {
+      mesh:    group,
+      exhaust,
+      pos:     spawnPos.clone(),
+      vel:     dir.clone().multiplyScalar(wpn.projectileSpeed),
+      alive:   true,
+      age:     0,
+      _trailTimer: 0,
+    };
+
+    this.rpgCount--;
+    this._rockets.push(rocket);
+    this.onRocketFire?.(rocket);
+  }
+
+  // ── 로켓 물리 업데이트 ──
+  _updateRockets(dt) {
+    if (!this._rockets || this._rockets.length === 0) return;
+    const scene = this.renderer?.scene;
+    if (!scene) return;
+
+    const toRemove = [];
+    for (const rocket of this._rockets) {
+      if (!rocket.alive) { toRemove.push(rocket); continue; }
+
+      rocket.age += dt;
+      const scale = dt * 60;
+
+      // 분사 파티클 트레일
+      rocket._trailTimer += dt;
+      if (rocket._trailTimer > 0.04 && this.renderer?.spawnSmokeParticle) {
+        this.renderer.spawnSmokeParticle(rocket.pos.clone());
+        rocket._trailTimer = 0;
+      }
+      // 분사구 글로우 깜빡임
+      if (rocket.exhaust) rocket.exhaust.material.opacity = 0.7 + Math.random() * 0.3;
+
+      // 이동
+      const nextPos = rocket.pos.clone().addScaledVector(rocket.vel, scale);
+
+      // ── 벽(박스) 충돌 ──
+      let hitWall = false;
+      for (const b of this.boxes) {
+        const [bx, by, bz] = b.pos;
+        const [sx, sy, sz] = b.size;
+        const R = 0.12;
+        if (nextPos.x > bx-sx-R && nextPos.x < bx+sx+R &&
+            nextPos.y > by-sy-R && nextPos.y < by+sy+R &&
+            nextPos.z > bz-sz-R && nextPos.z < bz+sz+R) {
+          hitWall = true;
+          break;
+        }
+      }
+
+      // ── 플레이어 충돌 체크 (main.js의 onRocketHitCheck 콜백) ──
+      let hitPlayer = false;
+      if (!hitWall && this.onRocketHitCheck) {
+        const result = this.onRocketHitCheck(rocket.pos, nextPos);
+        if (result) hitPlayer = true;
+      }
+
+      if (hitWall || hitPlayer || rocket.age > 8) {
+        // 폭발!
+        rocket.alive = false;
+        scene.remove(rocket.mesh);
+        this.onRocketExplode?.(rocket.pos.clone(), hitPlayer);
+        toRemove.push(rocket);
+        continue;
+      }
+
+      rocket.pos.copy(nextPos);
+      rocket.mesh.position.copy(nextPos);
+    }
+
+    for (const r of toRemove) {
+      const idx = this._rockets.indexOf(r);
+      if (idx !== -1) this._rockets.splice(idx, 1);
+    }
   }
 }
