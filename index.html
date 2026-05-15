@@ -611,54 +611,98 @@
       50% { box-shadow: 0 0 48px rgba(255,204,0,.6), inset 0 0 0 1px rgba(255,204,0,.4); }
     }
 
-    /* ── 온라인 플레이어 패널 ── */
-    #online-panel {
-      width: min(680px, 92vw);
-      margin-top: 14px;
-      padding: 14px;
-      background: rgba(0,0,0,.42);
+    /* ── 온라인 플레이어 사이드 패널 ── */
+    #online-side-panel {
+      position: fixed;
+      top: 90px;
+      right: 0;
+      width: 220px;
+      max-height: calc(100vh - 110px);
+      display: flex;
+      flex-direction: column;
+      background: rgba(3,8,18,.88);
       border: 1px solid rgba(0,255,224,.18);
-      box-shadow: inset 0 0 0 1px rgba(255,255,255,.03);
+      border-right: none;
+      border-radius: 6px 0 0 6px;
+      font-family: 'Share Tech Mono', monospace;
+      z-index: 15;
       pointer-events: auto;
-      animation: panelWake .5s .3s cubic-bezier(.16,1,.3,1) both;
+      backdrop-filter: blur(12px);
+      box-shadow: -4px 0 24px rgba(0,0,0,.4), inset 0 0 0 1px rgba(255,255,255,.03);
+      overflow: hidden;
+      transition: transform .25s cubic-bezier(.16,1,.3,1);
     }
-    .online-header {
-      font-family: 'Orbitron', monospace;
-      font-size: 10px;
-      letter-spacing: 4px;
-      color: #00ffe0;
-      margin-bottom: 10px;
+    /* 1100px 미만이면 숨김 */
+    @media (max-width: 1099px) {
+      #online-side-panel { display: none; }
+    }
+    #online-side-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding-bottom: 8px;
+      padding: 10px 12px 8px;
       border-bottom: 1px solid rgba(0,255,224,.12);
+      flex-shrink: 0;
+    }
+    .online-side-title {
+      font-family: 'Orbitron', monospace;
+      font-size: 9px;
+      letter-spacing: 4px;
+      color: #00ffe0;
+    }
+    #online-count {
+      font-size: 10px;
+      letter-spacing: 2px;
+      color: #00ffe0;
+      opacity: .55;
+    }
+    #online-players-list {
+      overflow-y: auto;
+      flex: 1;
+      padding: 4px 0;
+    }
+    .online-empty {
+      padding: 14px 12px;
+      font-size: 10px;
+      letter-spacing: 2px;
+      opacity: .35;
+      text-align: center;
     }
     .online-player-row {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 8px 4px;
+      padding: 7px 10px;
       border-bottom: 1px solid rgba(255,255,255,.04);
-      font-family: 'Share Tech Mono', monospace;
-      font-size: 13px;
+      gap: 6px;
     }
-    .online-nick { color: #fff; letter-spacing: 2px; }
+    .online-nick {
+      color: #fff;
+      font-size: 12px;
+      letter-spacing: 1px;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 1;
+    }
     .duel-challenge-btn {
-      height: 30px;
-      padding: 0 12px;
+      flex-shrink: 0;
+      height: 26px;
+      padding: 0 8px;
       font-family: 'Share Tech Mono', monospace;
-      font-size: 10px;
-      letter-spacing: 2px;
+      font-size: 9px;
+      letter-spacing: 1px;
       color: #ffcc00;
       background: rgba(255,204,0,.08);
-      border: 1px solid rgba(255,204,0,.35);
+      border: 1px solid rgba(255,204,0,.3);
       cursor: pointer;
       transition: all .15s;
+      white-space: nowrap;
     }
     .duel-challenge-btn:hover {
       background: rgba(255,204,0,.2);
-      box-shadow: 0 0 14px rgba(255,204,0,.3);
+      box-shadow: 0 0 10px rgba(255,204,0,.3);
     }
 
     /* ── 듀얼 모달 공통 ── */
@@ -787,6 +831,17 @@
 <canvas id="canvas" tabindex="0"></canvas>
 <div id="scanlines"></div>
 <div id="speed-lines"></div>
+
+<!-- 온라인 플레이어 사이드 패널 -->
+<div id="online-side-panel">
+  <div id="online-side-header">
+    <span class="online-side-title">● ONLINE</span>
+    <span id="online-count">0</span>
+  </div>
+  <div id="online-players-list">
+    <div class="online-empty">NO PLAYERS</div>
+  </div>
+</div>
 
 <!-- HUD -->
 <div id="hud">
@@ -985,17 +1040,6 @@
     Right Click Aim &nbsp;|&nbsp; R Base Reload &nbsp;|&nbsp; TAB Scoreboard<br/><br/>
     1/2/5 Loadout Weapon &nbsp;|&nbsp; 3 Bandage &nbsp;|&nbsp; 4 Grenade
   </p>
-
-  <!-- 온라인 플레이어 목록 -->
-  <div id="online-panel">
-    <div class="online-header">
-      <span>● ONLINE PLAYERS</span>
-      <span id="online-count" style="opacity:.5;font-size:10px">0 ONLINE</span>
-    </div>
-    <div id="online-players-list">
-      <div style="opacity:.4;font-size:10px;letter-spacing:2px;padding:8px 0">NO PLAYERS ONLINE</div>
-    </div>
-  </div>
 </div>
 
 <!-- 듀얼 요청 오버레이 -->
