@@ -1,0 +1,1002 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>VOID PROTOCOL — ACCOUNT</title>
+  <script type="importmap">
+  {
+    "imports": {
+      "three":             "https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js",
+      "three/":            "https://cdn.jsdelivr.net/npm/three@0.158.0/",
+      "firebase/app":      "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js",
+      "firebase/database": "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js",
+      "firebase/auth":     "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js"
+    }
+  }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap"/>
+  <style>
+    :root {
+      --cyan:   #00ffe0;
+      --gold:   #ffcc00;
+      --red:    #ff4444;
+      --bg:     #03080d;
+      --panel:  rgba(0,0,0,0.72);
+      --border: rgba(0,255,224,0.18);
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%; height: 100%;
+      background: var(--bg);
+      color: #cdd8e0;
+      font-family: 'Share Tech Mono', monospace;
+      overflow-x: hidden;
+    }
+
+    /* ── 배경 효과 ── */
+    body::before {
+      content: '';
+      position: fixed; inset: 0; pointer-events: none; z-index: 0;
+      background:
+        radial-gradient(ellipse 80% 60% at 50% -10%, rgba(0,255,224,0.07), transparent),
+        radial-gradient(ellipse 60% 40% at 80% 110%, rgba(255,204,0,0.05), transparent);
+    }
+    #scanlines {
+      position: fixed; inset: 0; pointer-events: none; z-index: 999;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,0,0,0.05) 2px,
+        rgba(0,0,0,0.05) 4px
+      );
+    }
+
+    /* ── 상단 네비 ── */
+    .topbar {
+      position: relative; z-index: 10;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 32px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(3,8,13,0.88);
+      backdrop-filter: blur(14px);
+      animation: slideDown 0.5s cubic-bezier(.16,1,.3,1) both;
+    }
+    .topbar-brand {
+      font-family: 'Orbitron', monospace;
+      font-size: 11px; letter-spacing: 5px;
+      color: rgba(0,255,224,0.7);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .topbar-brand::before {
+      content: '';
+      width: 8px; height: 8px;
+      border: 1px solid var(--cyan);
+      transform: rotate(45deg);
+      box-shadow: 0 0 10px rgba(0,255,224,0.5);
+      animation: pulse 2s ease-in-out infinite;
+    }
+    .topbar-title {
+      font-family: 'Orbitron', monospace;
+      font-size: 13px; letter-spacing: 6px; color: var(--cyan);
+    }
+    .back-btn {
+      height: 34px; padding: 0 16px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px; letter-spacing: 3px;
+      color: rgba(255,255,255,0.5);
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.12);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .back-btn:hover { color: var(--cyan); border-color: var(--cyan); background: rgba(0,255,224,0.06); }
+
+    /* ── 메인 레이아웃 ── */
+    .page {
+      position: relative; z-index: 1;
+      max-width: 1100px; margin: 0 auto;
+      padding: 32px 24px 64px;
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      grid-template-rows: auto auto;
+      gap: 20px;
+      animation: fadeUp 0.6s 0.1s cubic-bezier(.16,1,.3,1) both;
+    }
+
+    /* ── 공통 패널 ── */
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      box-shadow: 0 18px 60px rgba(0,0,0,0.3), inset 0 0 0 1px rgba(255,255,255,0.03);
+      overflow: hidden;
+    }
+    .panel-head {
+      padding: 14px 20px;
+      border-bottom: 1px solid rgba(0,255,224,0.1);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .panel-title {
+      font-family: 'Orbitron', monospace;
+      font-size: 10px; letter-spacing: 4px; color: var(--cyan);
+    }
+    .panel-sub { font-size: 9px; letter-spacing: 2px; opacity: 0.35; }
+    .panel-body { padding: 20px; }
+
+    /* ── 프로필 패널 (좌상단) ── */
+    .profile-panel {
+      grid-column: 1;
+      grid-row: 1;
+    }
+    .profile-avatar {
+      width: 72px; height: 72px;
+      border: 2px solid rgba(0,255,224,0.3);
+      border-radius: 4px;
+      background: rgba(0,255,224,0.05);
+      display: grid; place-items: center;
+      font-size: 28px;
+      margin-bottom: 14px;
+    }
+    .profile-name {
+      font-family: 'Orbitron', monospace;
+      font-size: 16px; letter-spacing: 3px; color: #fff;
+      margin-bottom: 4px;
+    }
+    .profile-uid { font-size: 9px; opacity: 0.28; letter-spacing: 2px; }
+
+    /* ── 스탯 패널 ── */
+    .stats-panel {
+      grid-column: 1;
+      grid-row: 2;
+    }
+    .stat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .stat-card {
+      background: rgba(0,0,0,0.4);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 3px;
+      padding: 14px 12px;
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .stat-label { font-size: 8px; letter-spacing: 3px; opacity: 0.4; }
+    .stat-value {
+      font-family: 'Orbitron', monospace;
+      font-size: 22px; font-weight: 900;
+    }
+    .stat-value.kills { color: var(--cyan); }
+    .stat-value.deaths { color: var(--red); }
+    .stat-value.kd { color: var(--gold); }
+    .stat-value.rating { color: #cc88ff; }
+    .stat-bar {
+      height: 2px; background: rgba(255,255,255,0.08);
+      margin-top: 4px; border-radius: 1px; overflow: hidden;
+    }
+    .stat-bar-fill { height: 100%; border-radius: 1px; transition: width 1s 0.3s ease; }
+
+    /* ── 편집 패널 (우측) ── */
+    .edit-panel {
+      grid-column: 2;
+      grid-row: 1 / 3;
+    }
+    .tab-bar {
+      display: flex;
+      border-bottom: 1px solid rgba(0,255,224,0.1);
+    }
+    .tab {
+      flex: 1; height: 46px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 9px; letter-spacing: 3px;
+      color: rgba(255,255,255,0.35);
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      transition: all 0.18s;
+      border-bottom: 2px solid transparent;
+    }
+    .tab:hover { color: rgba(0,255,224,0.7); }
+    .tab.active {
+      color: var(--cyan);
+      border-bottom-color: var(--cyan);
+      background: rgba(0,255,224,0.04);
+    }
+
+    .tab-pane { display: none; padding: 24px; }
+    .tab-pane.active { display: block; }
+
+    /* ── 폼 요소 ── */
+    .field { margin-bottom: 18px; }
+    .field-label {
+      display: block;
+      font-size: 9px; letter-spacing: 3px; opacity: 0.45;
+      margin-bottom: 8px;
+    }
+    .field-input {
+      width: 100%; height: 40px;
+      background: rgba(0,0,0,0.45);
+      border: 1px solid rgba(0,255,224,0.2);
+      padding: 0 14px;
+      color: #fff;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 13px; letter-spacing: 2px;
+      transition: border-color 0.15s;
+      outline: none;
+    }
+    .field-input:focus { border-color: rgba(0,255,224,0.5); box-shadow: 0 0 0 2px rgba(0,255,224,0.07); }
+    .field-hint { margin-top: 5px; font-size: 9px; opacity: 0.3; letter-spacing: 1px; }
+
+    .btn {
+      height: 40px; padding: 0 22px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px; letter-spacing: 3px;
+      cursor: pointer; border: 1px solid; border-radius: 2px;
+      transition: all 0.15s;
+    }
+    .btn-primary {
+      color: var(--cyan);
+      background: rgba(0,255,224,0.08);
+      border-color: rgba(0,255,224,0.35);
+    }
+    .btn-primary:hover { background: rgba(0,255,224,0.16); box-shadow: 0 0 20px rgba(0,255,224,0.12); }
+    .btn-danger {
+      color: var(--red);
+      background: rgba(255,68,68,0.06);
+      border-color: rgba(255,68,68,0.28);
+    }
+    .btn-danger:hover { background: rgba(255,68,68,0.14); }
+    .btn-gold {
+      color: var(--gold);
+      background: rgba(255,204,0,0.07);
+      border-color: rgba(255,204,0,0.3);
+    }
+    .btn-gold:hover { background: rgba(255,204,0,0.15); }
+
+    .msg {
+      margin-top: 14px; padding: 10px 14px;
+      font-size: 10px; letter-spacing: 2px;
+      border-radius: 2px;
+      display: none;
+    }
+    .msg.ok  { background: rgba(0,255,100,0.08); border: 1px solid rgba(0,255,100,0.25); color: #00ff88; }
+    .msg.err { background: rgba(255,68,68,0.08); border: 1px solid rgba(255,68,68,0.25); color: var(--red); }
+    .msg.show { display: block; }
+
+    /* ── 캐릭터 픽셀 에디터 ── */
+    .char-editor {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 24px;
+      align-items: start;
+    }
+    .pixel-wrap {
+      display: flex; flex-direction: column; align-items: center; gap: 12px;
+    }
+    .pixel-grid {
+      display: grid;
+      grid-template-columns: repeat(16, 18px);
+      grid-template-rows: repeat(16, 18px);
+      gap: 1px;
+      background: rgba(0,0,0,0.5);
+      border: 1px solid rgba(0,255,224,0.15);
+      padding: 4px;
+      cursor: crosshair;
+      user-select: none;
+    }
+    .px {
+      width: 18px; height: 18px;
+      border-radius: 1px;
+      transition: filter 0.05s;
+    }
+    .px:hover { filter: brightness(1.5); outline: 1px solid rgba(255,255,255,0.4); }
+    .px.active-paint { outline: 1px solid #fff; }
+
+    .char-controls { display: flex; flex-direction: column; gap: 14px; }
+    .color-palette {
+      display: grid;
+      grid-template-columns: repeat(8, 28px);
+      gap: 5px;
+    }
+    .pal-color {
+      width: 28px; height: 28px;
+      border-radius: 2px;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: transform 0.1s, border-color 0.1s;
+    }
+    .pal-color:hover { transform: scale(1.15); }
+    .pal-color.selected { border-color: #fff; box-shadow: 0 0 8px rgba(255,255,255,0.4); }
+
+    .color-custom-wrap {
+      display: flex; align-items: center; gap: 10px;
+    }
+    .color-picker-input {
+      width: 40px; height: 32px;
+      border: 1px solid rgba(0,255,224,0.3);
+      background: transparent;
+      cursor: pointer;
+      padding: 2px;
+    }
+    .color-picker-label { font-size: 9px; letter-spacing: 2px; opacity: 0.5; }
+
+    .preset-list {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .preset-btn {
+      height: 32px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 9px; letter-spacing: 2px;
+      color: rgba(255,255,255,0.6);
+      background: rgba(0,0,0,0.35);
+      border: 1px solid rgba(255,255,255,0.1);
+      cursor: pointer;
+      transition: all 0.12s;
+    }
+    .preset-btn:hover { color: #fff; border-color: rgba(255,255,255,0.3); background: rgba(255,255,255,0.06); }
+
+    /* 미리보기 캐릭터 */
+    .char-preview {
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+    }
+    .preview-title { font-size: 8px; letter-spacing: 3px; opacity: 0.35; }
+    .preview-canvas { border: 1px solid rgba(0,255,224,0.15); image-rendering: pixelated; }
+
+    .section-title {
+      font-size: 9px; letter-spacing: 3px; color: rgba(0,255,224,0.6);
+      margin-bottom: 10px; padding-bottom: 6px;
+      border-bottom: 1px solid rgba(0,255,224,0.08);
+    }
+
+    /* 분리선 */
+    .divider {
+      height: 1px;
+      background: rgba(0,255,224,0.08);
+      margin: 20px 0;
+    }
+
+    /* ── 애니메이션 ── */
+    @keyframes slideDown {
+      from { opacity: 0; transform: translateY(-16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 0.5; transform: rotate(45deg) scale(0.85); }
+      50%       { opacity: 1;   transform: rotate(45deg) scale(1.15); }
+    }
+
+    /* 반응형 */
+    @media (max-width: 800px) {
+      .page { grid-template-columns: 1fr; grid-template-rows: auto; }
+      .edit-panel { grid-column: 1; grid-row: auto; }
+      .stats-panel { grid-column: 1; }
+      .char-editor { grid-template-columns: 1fr; }
+      .pixel-grid { grid-template-columns: repeat(16, 16px); grid-template-rows: repeat(16, 16px); }
+      .px { width: 16px; height: 16px; }
+    }
+
+    .spinner {
+      display: inline-block; width: 12px; height: 12px;
+      border: 2px solid rgba(0,255,224,0.3);
+      border-top-color: var(--cyan);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle; margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+<div id="scanlines"></div>
+
+<!-- 상단 네비 -->
+<div class="topbar">
+  <div class="topbar-brand">VOID PROTOCOL</div>
+  <div class="topbar-title">ACCOUNT</div>
+  <button class="back-btn" onclick="location.href='index.html'">◀ BACK TO GAME</button>
+</div>
+
+<!-- 메인 -->
+<div class="page">
+
+  <!-- 좌측: 프로필 -->
+  <div class="panel profile-panel">
+    <div class="panel-head">
+      <div class="panel-title">PROFILE</div>
+      <div class="panel-sub" id="uid-label"></div>
+    </div>
+    <div class="panel-body">
+      <div class="profile-avatar" id="preview-avatar">👤</div>
+      <div class="profile-name" id="disp-nick">LOADING...</div>
+      <div class="profile-uid" id="disp-uid">UID: —</div>
+    </div>
+  </div>
+
+  <!-- 좌측: 스탯 -->
+  <div class="panel stats-panel">
+    <div class="panel-head">
+      <div class="panel-title">COMBAT STATS</div>
+      <div class="panel-sub">LIFETIME</div>
+    </div>
+    <div class="panel-body">
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-label">KILLS</div>
+          <div class="stat-value kills" id="stat-kills">—</div>
+          <div class="stat-bar"><div class="stat-bar-fill" id="bar-kills" style="width:0%;background:var(--cyan)"></div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">DEATHS</div>
+          <div class="stat-value deaths" id="stat-deaths">—</div>
+          <div class="stat-bar"><div class="stat-bar-fill" id="bar-deaths" style="width:0%;background:var(--red)"></div></div>
+        </div>
+        <div class="stat-card" style="grid-column:1/-1">
+          <div class="stat-label">K/D RATIO</div>
+          <div class="stat-value kd" id="stat-kd">—</div>
+        </div>
+        <div class="stat-card" style="grid-column:1/-1">
+          <div class="stat-label">RATING (RP)</div>
+          <div class="stat-value rating" id="stat-rating">—</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 우측: 편집 탭 패널 -->
+  <div class="panel edit-panel">
+    <div class="tab-bar">
+      <button class="tab active" data-tab="nickname">NICKNAME</button>
+      <button class="tab" data-tab="password">PASSWORD</button>
+      <button class="tab" data-tab="character">CHARACTER</button>
+    </div>
+
+    <!-- ── 닉네임 변경 탭 ── -->
+    <div class="tab-pane active" id="tab-nickname">
+      <div class="field">
+        <label class="field-label">CURRENT NICKNAME</label>
+        <div class="field-input" id="cur-nick-display" style="display:flex;align-items:center;color:var(--cyan);opacity:0.7;">—</div>
+      </div>
+      <div class="divider"></div>
+      <div class="field">
+        <label class="field-label">NEW NICKNAME</label>
+        <input class="field-input" id="new-nick" maxlength="12" placeholder="2~12자, 영문/숫자/한글/_-"/>
+        <div class="field-hint">영문, 숫자, 한글, _(언더스코어), -(하이픈) 허용</div>
+      </div>
+      <div class="field">
+        <label class="field-label">CURRENT PASSWORD (확인용)</label>
+        <input class="field-input" id="nick-pw" type="password" placeholder="현재 비밀번호 입력"/>
+      </div>
+      <button class="btn btn-primary" id="btn-change-nick">CHANGE NICKNAME</button>
+      <div class="msg" id="msg-nick"></div>
+    </div>
+
+    <!-- ── 비밀번호 변경 탭 ── -->
+    <div class="tab-pane" id="tab-password">
+      <div class="field">
+        <label class="field-label">CURRENT PASSWORD</label>
+        <input class="field-input" id="cur-pw" type="password" placeholder="현재 비밀번호"/>
+      </div>
+      <div class="divider"></div>
+      <div class="field">
+        <label class="field-label">NEW PASSWORD</label>
+        <input class="field-input" id="new-pw" type="password" placeholder="새 비밀번호 (4자 이상)"/>
+      </div>
+      <div class="field">
+        <label class="field-label">CONFIRM NEW PASSWORD</label>
+        <input class="field-input" id="new-pw2" type="password" placeholder="새 비밀번호 확인"/>
+      </div>
+      <button class="btn btn-primary" id="btn-change-pw">CHANGE PASSWORD</button>
+      <div class="msg" id="msg-pw"></div>
+    </div>
+
+    <!-- ── 캐릭터 편집 탭 ── -->
+    <div class="tab-pane" id="tab-character">
+      <div class="char-editor">
+        <!-- 픽셀 그리드 -->
+        <div class="pixel-wrap">
+          <div class="section-title">PIXEL CANVAS · 16×16</div>
+          <div class="pixel-grid" id="pixel-grid"></div>
+          <div style="display:flex;gap:8px;margin-top:4px;">
+            <button class="btn btn-danger" id="btn-clear" style="height:30px;padding:0 12px;font-size:9px;">CLEAR</button>
+            <button class="btn btn-gold" id="btn-fill" style="height:30px;padding:0 12px;font-size:9px;">FILL</button>
+            <button class="btn btn-primary" style="height:30px;padding:0 12px;font-size:9px;" id="btn-erase-mode">ERASE</button>
+          </div>
+        </div>
+
+        <!-- 우측 컨트롤 -->
+        <div class="char-controls">
+          <!-- 미리보기 -->
+          <div class="char-preview">
+            <div class="preview-title">PREVIEW</div>
+            <canvas id="preview-canvas" class="preview-canvas" width="64" height="128"></canvas>
+          </div>
+
+          <div class="divider"></div>
+
+          <!-- 팔레트 -->
+          <div>
+            <div class="section-title">COLOR PALETTE</div>
+            <div class="color-palette" id="color-palette"></div>
+            <div class="color-custom-wrap" style="margin-top:10px;">
+              <input type="color" class="color-picker-input" id="color-picker" value="#00ffe0"/>
+              <span class="color-picker-label">CUSTOM COLOR</span>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <!-- 프리셋 -->
+          <div>
+            <div class="section-title">PRESETS</div>
+            <div class="preset-list">
+              <button class="preset-btn" data-preset="soldier">SOLDIER</button>
+              <button class="preset-btn" data-preset="ghost">GHOST</button>
+              <button class="preset-btn" data-preset="cyber">CYBER</button>
+              <button class="preset-btn" data-preset="hazmat">HAZMAT</button>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <button class="btn btn-primary" id="btn-save-char">SAVE CHARACTER</button>
+          <div class="msg" id="msg-char"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp }            from 'firebase/app';
+import { getDatabase, ref, get, child, update } from 'firebase/database';
+import { getAuth, signInAnonymously } from 'firebase/auth';
+
+// ── Firebase 설정 (기존 auth.js와 동일하게) ──
+const firebaseConfig = (await import('./js/auth.js')).db.app.options;
+
+// auth.js에서 직접 import
+import { db, auth, ensureAuth, login } from './js/auth.js';
+
+// ── 로그인 체크 ──
+const rawUser = sessionStorage.getItem('vp_user') || localStorage.getItem('vp_user');
+if (!rawUser) { location.href = 'login.html'; }
+let userInfo = JSON.parse(rawUser);
+
+// ── 해시 (auth.js와 동일) ──
+function hashPassword(pw) {
+  let h = 0;
+  for (let i = 0; i < pw.length; i++) { h = ((h << 5) - h) + pw.charCodeAt(i); h |= 0; }
+  return h.toString(16);
+}
+
+// ── UI 초기화 ──
+function renderProfile() {
+  document.getElementById('disp-nick').textContent   = userInfo.nickname;
+  document.getElementById('cur-nick-display').textContent = userInfo.nickname;
+  document.getElementById('disp-uid').textContent    = `UID: ${userInfo.uid || '—'}`;
+  document.getElementById('uid-label').textContent   = userInfo.uid?.slice(0,8) || '';
+}
+
+function renderStats() {
+  const k = userInfo.kills  || 0;
+  const d = userInfo.deaths || 0;
+  const kd = d > 0 ? (k/d).toFixed(2) : k > 0 ? '∞' : '—';
+  document.getElementById('stat-kills').textContent  = k;
+  document.getElementById('stat-deaths').textContent = d;
+  document.getElementById('stat-kd').textContent     = kd;
+  document.getElementById('stat-rating').textContent = `${userInfo.rating || 0} RP`;
+  const max = Math.max(k, d, 1);
+  setTimeout(() => {
+    document.getElementById('bar-kills').style.width  = `${(k/max)*100}%`;
+    document.getElementById('bar-deaths').style.width = `${(d/max)*100}%`;
+  }, 100);
+}
+
+// Firebase에서 최신 스탯 로드
+async function loadStats() {
+  try {
+    await ensureAuth();
+    const snap = await get(child(ref(db), `users/${userInfo.nickname}`));
+    if (snap.exists()) {
+      const data = snap.val();
+      userInfo.kills  = data.kills  || 0;
+      userInfo.deaths = data.deaths || 0;
+      userInfo.rating = data.rating || 0;
+      userInfo.pixels = data.pixels || userInfo.pixels;
+      // 세션 업데이트
+      const storage = localStorage.getItem('vp_user') ? localStorage : sessionStorage;
+      storage.setItem('vp_user', JSON.stringify(userInfo));
+      renderStats();
+      if (userInfo.pixels) loadPixelsToEditor(userInfo.pixels);
+    }
+  } catch(e) { console.warn('스탯 로드 실패:', e); }
+}
+
+renderProfile();
+renderStats();
+
+// ── 탭 전환 ──
+document.querySelectorAll('.tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
+  });
+});
+
+// ── 메시지 표시 ──
+function showMsg(id, text, type) {
+  const el = document.getElementById(id);
+  el.textContent = text;
+  el.className = `msg ${type} show`;
+  setTimeout(() => el.classList.remove('show'), 4000);
+}
+
+function setLoading(btnId, loading) {
+  const btn = document.getElementById(btnId);
+  if (loading) {
+    btn._orig = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner"></span>PROCESSING...';
+    btn.disabled = true;
+  } else {
+    btn.innerHTML = btn._orig;
+    btn.disabled = false;
+  }
+}
+
+// ── 닉네임 변경 ──
+document.getElementById('btn-change-nick').addEventListener('click', async () => {
+  const newNick = document.getElementById('new-nick').value.trim();
+  const pw      = document.getElementById('nick-pw').value;
+
+  if (!newNick || newNick.length < 2)  return showMsg('msg-nick', '닉네임은 2자 이상이어야 합니다.', 'err');
+  if (newNick.length > 12)             return showMsg('msg-nick', '닉네임은 12자 이하여야 합니다.', 'err');
+  if (!/^[a-zA-Z0-9가-힣_\-]+$/.test(newNick)) return showMsg('msg-nick', '허용되지 않는 문자가 포함되어 있습니다.', 'err');
+  if (!pw)                             return showMsg('msg-nick', '현재 비밀번호를 입력하세요.', 'err');
+  if (newNick === userInfo.nickname)   return showMsg('msg-nick', '현재 닉네임과 동일합니다.', 'err');
+
+  setLoading('btn-change-nick', true);
+  try {
+    await ensureAuth();
+    // 비밀번호 확인
+    const snap = await get(child(ref(db), `users/${userInfo.nickname}`));
+    if (!snap.exists()) throw new Error('사용자 데이터를 찾을 수 없습니다.');
+    const data = snap.val();
+    if (data.password !== hashPassword(pw)) throw new Error('비밀번호가 틀렸습니다.');
+
+    // 새 닉네임 중복 확인
+    const newSnap = await get(child(ref(db), `users/${newNick}`));
+    if (newSnap.exists()) throw new Error('이미 사용 중인 닉네임입니다.');
+
+    // 기존 데이터 복사 → 새 닉네임으로 저장
+    const newData = { ...data, nickname: newNick };
+    await update(ref(db, `users/${newNick}`), newData);
+    // uid_map 업데이트
+    await update(ref(db, `uid_map/${userInfo.uid}`), { nickname: newNick }).catch(() =>
+      import('firebase/database').then(({ set, ref: r }) =>
+        set(r(db, `uid_map/${userInfo.uid}`), newNick)
+      )
+    );
+
+    // 세션 업데이트
+    userInfo.nickname = newNick;
+    const storage = localStorage.getItem('vp_user') ? localStorage : sessionStorage;
+    storage.setItem('vp_user', JSON.stringify(userInfo));
+    renderProfile();
+    document.getElementById('new-nick').value = '';
+    document.getElementById('nick-pw').value  = '';
+    showMsg('msg-nick', `닉네임이 [${newNick}]으로 변경되었습니다!`, 'ok');
+  } catch(e) {
+    showMsg('msg-nick', e.message, 'err');
+  } finally {
+    setLoading('btn-change-nick', false);
+  }
+});
+
+// ── 비밀번호 변경 ──
+document.getElementById('btn-change-pw').addEventListener('click', async () => {
+  const curPw  = document.getElementById('cur-pw').value;
+  const newPw  = document.getElementById('new-pw').value;
+  const newPw2 = document.getElementById('new-pw2').value;
+
+  if (!curPw)           return showMsg('msg-pw', '현재 비밀번호를 입력하세요.', 'err');
+  if (!newPw || newPw.length < 4) return showMsg('msg-pw', '새 비밀번호는 4자 이상이어야 합니다.', 'err');
+  if (newPw !== newPw2) return showMsg('msg-pw', '새 비밀번호가 일치하지 않습니다.', 'err');
+  if (curPw === newPw)  return showMsg('msg-pw', '현재 비밀번호와 동일합니다.', 'err');
+
+  setLoading('btn-change-pw', true);
+  try {
+    await ensureAuth();
+    const snap = await get(child(ref(db), `users/${userInfo.nickname}`));
+    if (!snap.exists()) throw new Error('사용자 데이터를 찾을 수 없습니다.');
+    const data = snap.val();
+    if (data.password !== hashPassword(curPw)) throw new Error('현재 비밀번호가 틀렸습니다.');
+
+    await update(ref(db, `users/${userInfo.nickname}`), { password: hashPassword(newPw) });
+    document.getElementById('cur-pw').value  = '';
+    document.getElementById('new-pw').value  = '';
+    document.getElementById('new-pw2').value = '';
+    showMsg('msg-pw', '비밀번호가 성공적으로 변경되었습니다.', 'ok');
+  } catch(e) {
+    showMsg('msg-pw', e.message, 'err');
+  } finally {
+    setLoading('btn-change-pw', false);
+  }
+});
+
+// ══════════════════════════════════════
+// ── 픽셀 에디터 ──
+// ══════════════════════════════════════
+const GRID_SIZE = 16;
+let pixels = [];          // 16×16 색상 배열 (null or '#rrggbb')
+let selectedColor = '#00ffe0';
+let eraseMode     = false;
+let isPainting    = false;
+
+// 기본 픽셀 초기화
+function initPixels() {
+  pixels = [];
+  for (let y = 0; y < GRID_SIZE; y++) {
+    const row = [];
+    for (let x = 0; x < GRID_SIZE; x++) row.push(null);
+    pixels.push(row);
+  }
+}
+
+// 팔레트 색상
+const PALETTE = [
+  '#ff4444','#ff8844','#ffcc00','#88ff44',
+  '#00ffe0','#44aaff','#8844ff','#ff44cc',
+  '#ffffff','#cccccc','#888888','#444444',
+  '#ffccaa','#cc8855','#884422','#000000',
+  '#4477bb','#2255aa','#3366aa','#1144aa',
+  '#44aa55','#226633','#556b2f','#2d4a1e',
+  '#aa3333','#772222','#cc4444','#ee6666',
+  '#ffaa00','#dd8800','#cc6600','#aa4400',
+];
+
+function buildPalette() {
+  const pal = document.getElementById('color-palette');
+  PALETTE.forEach(col => {
+    const el = document.createElement('div');
+    el.className = 'pal-color';
+    el.style.background = col;
+    el.dataset.color = col;
+    el.addEventListener('click', () => {
+      eraseMode = false;
+      document.getElementById('btn-erase-mode').style.opacity = '1';
+      selectedColor = col;
+      document.querySelectorAll('.pal-color').forEach(p => p.classList.remove('selected'));
+      el.classList.add('selected');
+      document.getElementById('color-picker').value = col;
+    });
+    pal.appendChild(el);
+  });
+}
+
+document.getElementById('color-picker').addEventListener('input', e => {
+  selectedColor = e.target.value;
+  eraseMode = false;
+  document.querySelectorAll('.pal-color').forEach(p => p.classList.remove('selected'));
+});
+
+// 픽셀 그리드 빌드
+function buildGrid() {
+  const grid = document.getElementById('pixel-grid');
+  grid.innerHTML = '';
+  for (let y = 0; y < GRID_SIZE; y++) {
+    for (let x = 0; x < GRID_SIZE; x++) {
+      const cell = document.createElement('div');
+      cell.className = 'px';
+      cell.dataset.x = x;
+      cell.dataset.y = y;
+      cell.style.background = pixels[y][x] || 'rgba(255,255,255,0.04)';
+
+      cell.addEventListener('mousedown', e => { e.preventDefault(); isPainting = true; paint(x, y); });
+      cell.addEventListener('mouseenter', () => { if (isPainting) paint(x, y); });
+      grid.appendChild(cell);
+    }
+  }
+  document.addEventListener('mouseup', () => isPainting = false);
+}
+
+function paint(x, y) {
+  pixels[y][x] = eraseMode ? null : selectedColor;
+  const idx = y * GRID_SIZE + x;
+  const cell = document.getElementById('pixel-grid').children[idx];
+  cell.style.background = pixels[y][x] || 'rgba(255,255,255,0.04)';
+  updatePreview();
+}
+
+// CLEAR
+document.getElementById('btn-clear').addEventListener('click', () => {
+  initPixels(); buildGrid(); updatePreview();
+});
+
+// FILL (현재 색으로 전체 채우기)
+document.getElementById('btn-fill').addEventListener('click', () => {
+  for (let y = 0; y < GRID_SIZE; y++)
+    for (let x = 0; x < GRID_SIZE; x++)
+      pixels[y][x] = eraseMode ? null : selectedColor;
+  buildGrid(); updatePreview();
+});
+
+// ERASE 모드 토글
+document.getElementById('btn-erase-mode').addEventListener('click', function() {
+  eraseMode = !eraseMode;
+  this.style.opacity = eraseMode ? '0.5' : '1';
+  this.textContent   = eraseMode ? 'PAINTING' : 'ERASE';
+});
+
+// 미리보기 렌더 (캐릭터 실루엣)
+function updatePreview() {
+  const canvas = document.getElementById('preview-canvas');
+  const ctx    = canvas.getContext('2d');
+  ctx.clearRect(0, 0, 64, 128);
+
+  // 배경
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.fillRect(0, 0, 64, 128);
+
+  // 바디 파트 영역 (auth.js와 동일한 16×16 매핑)
+  const parts = [
+    { label: 'head', x:4,  y:0,  w:8,  h:5,  cx:16, cy:10,  cw:32, ch:20 },
+    { label: 'body', x:3,  y:5,  w:10, h:6,  cx:12, cy:30,  cw:40, ch:28 },
+    { label: 'armL', x:0,  y:5,  w:3,  h:5,  cx:4,  cy:32,  cw:12, ch:24 },
+    { label: 'armR', x:13, y:5,  w:3,  h:5,  cx:48, cy:32,  cw:12, ch:24 },
+    { label: 'legL', x:4,  y:11, w:4,  h:5,  cx:12, cy:58,  cw:18, ch:28 },
+    { label: 'legR', x:8,  y:11, w:4,  h:5,  cx:34, cy:58,  cw:18, ch:28 },
+  ];
+
+  parts.forEach(p => {
+    const color = avgColor(p.x, p.x+p.w-1, p.y, p.y+p.h-1);
+    ctx.fillStyle = color;
+    ctx.fillRect(p.cx, p.cy, p.cw, p.ch);
+    // 음영 테두리
+    ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(p.cx+0.5, p.cy+0.5, p.cw-1, p.ch-1);
+  });
+
+  // 눈 (head 위에)
+  ctx.fillStyle = '#000';
+  ctx.fillRect(22, 16, 4, 4);
+  ctx.fillRect(38, 16, 4, 4);
+}
+
+function avgColor(x0, x1, y0, y1) {
+  let r=0,g=0,b=0,n=0;
+  for (let y=y0; y<=y1; y++) {
+    for (let x=x0; x<=x1; x++) {
+      const col = pixels[y]?.[x];
+      if (col && typeof col==='string' && col.startsWith('#') && col.length===7) {
+        r += parseInt(col.slice(1,3),16);
+        g += parseInt(col.slice(3,5),16);
+        b += parseInt(col.slice(5,7),16);
+        n++;
+      }
+    }
+  }
+  if (n===0) return '#556688';
+  return `rgb(${Math.round(r/n)},${Math.round(g/n)},${Math.round(b/n)})`;
+}
+
+// 기존 픽셀 로드
+function loadPixelsToEditor(pixelData) {
+  pixels = [];
+  for (let y=0; y<GRID_SIZE; y++) {
+    const row = [];
+    for (let x=0; x<GRID_SIZE; x++) row.push(pixelData[y]?.[x] || null);
+    pixels.push(row);
+  }
+  buildGrid();
+  updatePreview();
+}
+
+// ── 프리셋 정의 ──
+const PRESETS = {
+  soldier: (() => {
+    const g = Array.from({length:16}, () => Array(16).fill(null));
+    // 머리 (카키)
+    for(let y=0;y<=4;y++) for(let x=4;x<=11;x++) g[y][x]='#5a6a35';
+    g[2][5]=g[2][6]=g[2][9]=g[2][10]='#222';
+    // 몸통 (올리브)
+    for(let y=5;y<=10;y++) for(let x=3;x<=12;x++) g[y][x]='#4a5a28';
+    // 팔
+    for(let y=5;y<=9;y++) { g[y][0]=g[y][1]=g[y][2]='#4a5a28'; g[y][13]=g[y][14]=g[y][15]='#4a5a28'; }
+    // 다리 (다크 카키)
+    for(let y=11;y<=15;y++) { for(let x=4;x<=7;x++) g[y][x]='#3d4a20'; for(let x=8;x<=11;x++) g[y][x]='#3d4a20'; }
+    return g;
+  })(),
+  ghost: (() => {
+    const g = Array.from({length:16}, () => Array(16).fill(null));
+    for(let y=0;y<=4;y++) for(let x=4;x<=11;x++) g[y][x]='#cccccc';
+    g[2][5]=g[2][6]='#ff3333'; g[2][9]=g[2][10]='#ff3333';
+    for(let y=5;y<=10;y++) for(let x=3;x<=12;x++) g[y][x]='#aaaaaa';
+    for(let y=5;y<=9;y++) { g[y][0]=g[y][1]=g[y][2]='#aaaaaa'; g[y][13]=g[y][14]=g[y][15]='#aaaaaa'; }
+    for(let y=11;y<=15;y++) { for(let x=4;x<=7;x++) g[y][x]='#999999'; for(let x=8;x<=11;x++) g[y][x]='#999999'; }
+    return g;
+  })(),
+  cyber: (() => {
+    const g = Array.from({length:16}, () => Array(16).fill(null));
+    for(let y=0;y<=4;y++) for(let x=4;x<=11;x++) g[y][x]='#1a1a2e';
+    g[2][5]=g[2][6]='#00ffe0'; g[2][9]=g[2][10]='#00ffe0';
+    for(let y=5;y<=10;y++) for(let x=3;x<=12;x++) g[y][x]='#16213e';
+    g[7][5]=g[7][6]=g[7][7]=g[7][8]=g[7][9]=g[7][10]='#00ffe0';
+    for(let y=5;y<=9;y++) { g[y][0]=g[y][1]=g[y][2]='#0f3460'; g[y][13]=g[y][14]=g[y][15]='#0f3460'; }
+    for(let y=11;y<=15;y++) { for(let x=4;x<=7;x++) g[y][x]='#16213e'; for(let x=8;x<=11;x++) g[y][x]='#0f3460'; }
+    return g;
+  })(),
+  hazmat: (() => {
+    const g = Array.from({length:16}, () => Array(16).fill(null));
+    for(let y=0;y<=4;y++) for(let x=4;x<=11;x++) g[y][x]='#ffaa00';
+    g[2][5]=g[2][6]=g[2][9]=g[2][10]='#333';
+    g[3][7]=g[3][8]='#ffdd00';
+    for(let y=5;y<=10;y++) for(let x=3;x<=12;x++) g[y][x]='#ff8800';
+    for(let y=5;y<=9;y++) { g[y][0]=g[y][1]=g[y][2]='#ff8800'; g[y][13]=g[y][14]=g[y][15]='#ff8800'; }
+    for(let y=11;y<=15;y++) { for(let x=4;x<=7;x++) g[y][x]='#cc6600'; for(let x=8;x<=11;x++) g[y][x]='#cc6600'; }
+    return g;
+  })(),
+};
+
+document.querySelectorAll('.preset-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const preset = PRESETS[btn.dataset.preset];
+    if (preset) { pixels = preset.map(row => [...row]); buildGrid(); updatePreview(); }
+  });
+});
+
+// ── 캐릭터 저장 ──
+document.getElementById('btn-save-char').addEventListener('click', async () => {
+  setLoading('btn-save-char', true);
+  try {
+    await ensureAuth();
+    await update(ref(db, `users/${userInfo.nickname}`), { pixels });
+    userInfo.pixels = pixels;
+    const storage = localStorage.getItem('vp_user') ? localStorage : sessionStorage;
+    storage.setItem('vp_user', JSON.stringify(userInfo));
+    showMsg('msg-char', '캐릭터가 저장되었습니다!', 'ok');
+    // 아바타 이모지 업데이트
+    document.getElementById('preview-avatar').innerHTML =
+      `<canvas id="preview-avatar-canvas" width="48" height="48" style="image-rendering:pixelated"></canvas>`;
+    renderAvatarCanvas();
+  } catch(e) {
+    showMsg('msg-char', e.message, 'err');
+  } finally {
+    setLoading('btn-save-char', false);
+  }
+});
+
+function renderAvatarCanvas() {
+  const c = document.getElementById('preview-avatar-canvas');
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  const scale = 3;
+  for (let y=0; y<GRID_SIZE; y++) {
+    for (let x=0; x<GRID_SIZE; x++) {
+      ctx.fillStyle = pixels[y][x] || 'transparent';
+      ctx.fillRect(x*3, y*3, 3, 3);
+    }
+  }
+}
+
+// ── 초기화 순서 ──
+initPixels();
+buildPalette();
+buildGrid();
+updatePreview();
+await loadStats();
+if (userInfo.pixels) { loadPixelsToEditor(userInfo.pixels); renderAvatarCanvas(); }
+</script>
+</body>
+</html>
