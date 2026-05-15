@@ -720,6 +720,50 @@ export class Renderer {
       parts._remoteGrenades[i].position.set(g.px, g.py, g.pz);
     }
 
+    // ── 원격 로켓 렌더링 ──
+    parts._remoteRockets = parts._remoteRockets || [];
+    const remoteRocketData = Array.isArray(info.rockets) ? info.rockets : [];
+    while (parts._remoteRockets.length > remoteRocketData.length) {
+      const old = parts._remoteRockets.pop();
+      this.scene.remove(old);
+    }
+    while (parts._remoteRockets.length < remoteRocketData.length) {
+      const rGroup = new THREE.Group();
+      const bodyGeo = new THREE.CylinderGeometry(0.045, 0.045, 0.55, 8);
+      const bodyMat = new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.6, metalness: 0.4 });
+      const body    = new THREE.Mesh(bodyGeo, bodyMat);
+      body.rotation.x = Math.PI / 2;
+      rGroup.add(body);
+      const noseGeo = new THREE.ConeGeometry(0.045, 0.18, 8);
+      const noseMat = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.3, metalness: 0.8 });
+      const nose    = new THREE.Mesh(noseGeo, noseMat);
+      nose.rotation.x = Math.PI / 2;
+      nose.position.z = -0.37;
+      rGroup.add(nose);
+      const exhaustGeo = new THREE.SphereGeometry(0.06, 6, 6);
+      const exhaustMat = new THREE.MeshBasicMaterial({ color: 0xff6600, transparent: true, opacity: 0.9 });
+      const exhaust    = new THREE.Mesh(exhaustGeo, exhaustMat);
+      exhaust.position.z = 0.30;
+      rGroup.add(exhaust);
+      rGroup._exhaust = exhaust;
+      this.scene.add(rGroup);
+      parts._remoteRockets.push(rGroup);
+    }
+    for (let i = 0; i < remoteRocketData.length; i++) {
+      const r = remoteRocketData[i];
+      const rGroup = parts._remoteRockets[i];
+      rGroup.position.set(r.px, r.py, r.pz);
+      const vel = new THREE.Vector3(r.vx, r.vy, r.vz);
+      if (vel.lengthSq() > 0.0001) {
+        const target = rGroup.position.clone().add(vel);
+        rGroup.lookAt(target);
+        rGroup.rotateY(Math.PI);
+      }
+      if (rGroup._exhaust) {
+        rGroup._exhaust.material.opacity = 0.7 + Math.random() * 0.3;
+      }
+    }
+
     return parts.group;
   }
 
@@ -728,6 +772,10 @@ export class Renderer {
       // 원격 수류탄 메시 정리
       if (playerMeshMap[pid]._remoteGrenades) {
         for (const g of playerMeshMap[pid]._remoteGrenades) this.scene.remove(g);
+      }
+      // 원격 로켓 메시 정리
+      if (playerMeshMap[pid]._remoteRockets) {
+        for (const r of playerMeshMap[pid]._remoteRockets) this.scene.remove(r);
       }
       this.scene.remove(playerMeshMap[pid].group);
       delete playerMeshMap[pid];
