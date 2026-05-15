@@ -606,6 +606,180 @@
       97% { opacity: 1; }
       98% { opacity: .24; }
     }
+    @keyframes duelPulse {
+      0%, 100% { box-shadow: 0 0 24px rgba(255,204,0,.3), inset 0 0 0 1px rgba(255,204,0,.15); }
+      50% { box-shadow: 0 0 48px rgba(255,204,0,.6), inset 0 0 0 1px rgba(255,204,0,.4); }
+    }
+
+    /* ── 온라인 플레이어 패널 ── */
+    #online-panel {
+      width: min(680px, 92vw);
+      margin-top: 14px;
+      padding: 14px;
+      background: rgba(0,0,0,.42);
+      border: 1px solid rgba(0,255,224,.18);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.03);
+      pointer-events: auto;
+      animation: panelWake .5s .3s cubic-bezier(.16,1,.3,1) both;
+    }
+    .online-header {
+      font-family: 'Orbitron', monospace;
+      font-size: 10px;
+      letter-spacing: 4px;
+      color: #00ffe0;
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(0,255,224,.12);
+    }
+    .online-player-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 4px;
+      border-bottom: 1px solid rgba(255,255,255,.04);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 13px;
+    }
+    .online-nick { color: #fff; letter-spacing: 2px; }
+    .duel-challenge-btn {
+      height: 30px;
+      padding: 0 12px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 2px;
+      color: #ffcc00;
+      background: rgba(255,204,0,.08);
+      border: 1px solid rgba(255,204,0,.35);
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .duel-challenge-btn:hover {
+      background: rgba(255,204,0,.2);
+      box-shadow: 0 0 14px rgba(255,204,0,.3);
+    }
+
+    /* ── 듀얼 모달 공통 ── */
+    #duel-request-overlay,
+    #duel-pick-overlay,
+    #duel-result-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+      background: rgba(0,0,0,.75);
+      backdrop-filter: blur(8px);
+    }
+    .duel-modal {
+      width: min(480px, 92vw);
+      background: rgba(5,8,20,.95);
+      border: 1px solid rgba(255,204,0,.4);
+      padding: 28px 32px;
+      font-family: 'Share Tech Mono', monospace;
+      box-shadow: 0 0 60px rgba(255,204,0,.15), inset 0 0 0 1px rgba(255,255,255,.04);
+      animation: duelPulse 1.8s ease-in-out infinite;
+    }
+    .duel-pick-modal { width: min(680px, 94vw); animation: none; }
+    .duel-modal-title {
+      font-family: 'Orbitron', monospace;
+      font-size: 14px;
+      letter-spacing: 5px;
+      color: #ffcc00;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .duel-modal-body { text-align: center; }
+    .duel-modal-actions { display: flex; gap: 12px; margin-top: 24px; }
+    .duel-btn {
+      flex: 1;
+      height: 44px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 13px;
+      letter-spacing: 3px;
+      cursor: pointer;
+      border: none;
+      transition: all .15s;
+    }
+    .duel-accept {
+      background: rgba(0,255,224,.15);
+      color: #00ffe0;
+      border: 1px solid rgba(0,255,224,.5) !important;
+    }
+    .duel-accept:hover { background: rgba(0,255,224,.3); box-shadow: 0 0 20px rgba(0,255,224,.4); }
+    .duel-decline {
+      background: rgba(255,68,68,.12);
+      color: #ff6666;
+      border: 1px solid rgba(255,68,68,.4) !important;
+    }
+    .duel-decline:hover { background: rgba(255,68,68,.25); }
+
+    /* 무기 선택 그리드 */
+    .duel-pick-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 8px;
+      max-height: 320px;
+      overflow-y: auto;
+    }
+    .duel-pick-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 10px 8px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 2px;
+      background: rgba(0,0,0,.4);
+      border: 1px solid rgba(255,255,255,.12);
+      color: rgba(255,255,255,.7);
+      cursor: pointer;
+      transition: all .12s;
+    }
+    .duel-pick-btn.selected {
+      background: rgba(var(--wc-r,0),255,var(--wc-b,0),.18);
+      border-color: var(--wc, #00ffe0);
+      color: var(--wc, #00ffe0);
+      box-shadow: 0 0 12px rgba(0,255,224,.2);
+    }
+    .duel-pick-btn:hover { background: rgba(255,255,255,.08); }
+
+    /* ── 듀얼 진행 HUD ── */
+    #duel-hud {
+      display: none;
+      position: fixed;
+      top: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 50;
+      pointer-events: none;
+    }
+    .duel-score-panel {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      background: rgba(5,8,20,.88);
+      border: 1px solid rgba(255,204,0,.35);
+      padding: 12px 32px;
+      font-family: 'Orbitron', monospace;
+      box-shadow: 0 0 30px rgba(255,204,0,.12);
+      backdrop-filter: blur(8px);
+    }
+    .duel-side { text-align: center; min-width: 60px; }
+    .duel-score-num { font-size: 36px; font-weight: 900; line-height: 1; }
+    .duel-score-label { font-size: 9px; letter-spacing: 3px; margin-top: 4px; opacity: .8; }
+    .duel-center-info { text-align: center; }
+    .duel-vs { font-size: 10px; letter-spacing: 4px; color: #ffcc00; opacity: .6; }
+    .duel-timer-big { font-size: 28px; font-weight: 900; color: #ffcc00; line-height: 1.2; }
+
+    /* 듀얼 결과 */
+    #duel-result-overlay { background: rgba(0,0,0,.85); }
   </style>
 </head>
 <body>
@@ -797,6 +971,7 @@
         <option value="spire">SKY SPIRE</option>
         <option value="circuit">NEON CIRCUIT</option>
         <option value="crater">CRATER RUN</option>
+        <option value="duel">DUEL ARENA</option>
       </select>
     </div>
     <div class="config-block">
@@ -810,6 +985,71 @@
     Right Click Aim &nbsp;|&nbsp; R Base Reload &nbsp;|&nbsp; TAB Scoreboard<br/><br/>
     1/2/5 Loadout Weapon &nbsp;|&nbsp; 3 Bandage &nbsp;|&nbsp; 4 Grenade
   </p>
+
+  <!-- 온라인 플레이어 목록 -->
+  <div id="online-panel">
+    <div class="online-header">
+      <span>● ONLINE PLAYERS</span>
+      <span id="online-count" style="opacity:.5;font-size:10px">0 ONLINE</span>
+    </div>
+    <div id="online-players-list">
+      <div style="opacity:.4;font-size:10px;letter-spacing:2px;padding:8px 0">NO PLAYERS ONLINE</div>
+    </div>
+  </div>
+</div>
+
+<!-- 듀얼 요청 오버레이 -->
+<div id="duel-request-overlay">
+  <div class="duel-modal">
+    <div class="duel-modal-title">⚔ DUEL REQUEST</div>
+    <div class="duel-modal-body">
+      <span id="duel-from-nick" style="color:#00ffe0;font-size:18px;">PLAYER</span>
+      <span style="opacity:.6;font-size:12px;letter-spacing:3px;display:block;margin-top:8px">CHALLENGES YOU TO A DUEL</span>
+    </div>
+    <div class="duel-modal-actions">
+      <button class="duel-btn duel-accept" id="duel-accept-btn" type="button">✓ ACCEPT</button>
+      <button class="duel-btn duel-decline" id="duel-decline-btn" type="button">✗ DECLINE</button>
+    </div>
+  </div>
+</div>
+
+<!-- 무기 선택 (10초) 오버레이 -->
+<div id="duel-pick-overlay">
+  <div class="duel-modal duel-pick-modal">
+    <div class="duel-modal-title">
+      ⚔ SELECT LOADOUT
+      <span style="color:#ffcc00;font-size:24px;min-width:32px;display:inline-block" id="duel-pick-timer">10</span>
+      <span style="font-size:11px;opacity:.5">SEC</span>
+    </div>
+    <div class="duel-modal-body">
+      <div style="font-size:10px;letter-spacing:3px;opacity:.5;margin-bottom:12px">CHOOSE UP TO 3 WEAPONS</div>
+      <div id="duel-pick-grid" class="duel-pick-grid"></div>
+    </div>
+    <button class="duel-btn duel-accept" id="duel-confirm-btn" type="button" style="margin-top:16px;width:100%">LOCK IN LOADOUT</button>
+  </div>
+</div>
+
+<!-- 듀얼 결과 -->
+<div id="duel-result-overlay">
+  <div id="duel-result-text" style="font-family:'Orbitron',monospace;font-size:48px;letter-spacing:8px;text-shadow:0 0 40px currentColor;animation:panelWake .4s both">⚔ VICTORY</div>
+</div>
+
+<!-- 듀얼 진행 중 HUD -->
+<div id="duel-hud">
+  <div class="duel-score-panel">
+    <div class="duel-side">
+      <div class="duel-score-num" id="duel-my-score">0</div>
+      <div class="duel-score-label" style="color:#00ffe0" id="duel-my-name">ME</div>
+    </div>
+    <div class="duel-center-info">
+      <div class="duel-vs">VS</div>
+      <div class="duel-timer-big" id="duel-timer">60</div>
+    </div>
+    <div class="duel-side">
+      <div class="duel-score-num" id="duel-opp-score">0</div>
+      <div class="duel-score-label" style="color:#ff4444" id="duel-opp-name">OPP</div>
+    </div>
+  </div>
 </div>
 
 <!-- 사망 화면 -->
@@ -819,5 +1059,22 @@
 </div>
 
 <script type="module" src="js/main.js"></script>
+<script>
+  // Accept / Decline 버튼 — main.js가 로드된 뒤 network가 초기화되면 동작
+  document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('duel-accept-btn')?.addEventListener('click', () => {
+      document.getElementById('duel-request-overlay').style.display = 'none';
+      // network는 main.js 모듈 스코프라 직접 접근 불가 → 커스텀 이벤트로 브릿지
+      window.dispatchEvent(new CustomEvent('duel-accept'));
+    });
+    document.getElementById('duel-decline-btn')?.addEventListener('click', () => {
+      document.getElementById('duel-request-overlay').style.display = 'none';
+      window.dispatchEvent(new CustomEvent('duel-decline'));
+    });
+    document.getElementById('duel-confirm-btn')?.addEventListener('click', () => {
+      window.dispatchEvent(new CustomEvent('duel-confirm'));
+    });
+  });
+</script>
 </body>
 </html>
