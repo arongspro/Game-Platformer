@@ -1088,7 +1088,7 @@ window.addEventListener('duel-confirm', () => confirmDuelLoadout());
 network.onOnlinePlayers = (players) => {
   updateOnlinePlayersList(players);
   const countEl = document.getElementById('online-count');
-  if (countEl) countEl.textContent = `${players.length} ONLINE`;
+  if (countEl) countEl.textContent = players.length;
 };
 
 // ── Duel 콜백 ──
@@ -1127,7 +1127,7 @@ function updateOnlinePlayersList(players) {
   if (!list) return;
   list.innerHTML = '';
   if (players.length === 0) {
-    list.innerHTML = '<div style="opacity:.4;font-size:10px;letter-spacing:2px;padding:8px 0">NO PLAYERS ONLINE</div>';
+    list.innerHTML = '<div class="online-empty">NO PLAYERS</div>';
     return;
   }
   for (const p of players) {
@@ -1135,7 +1135,7 @@ function updateOnlinePlayersList(players) {
     row.className = 'online-player-row';
     row.innerHTML = `
       <span class="online-nick">${escapeHtml(p.nickname)}</span>
-      <button class="duel-challenge-btn" data-uid="${p.uid}" data-nick="${escapeHtml(p.nickname)}" type="button">⚔ CHALLENGE</button>
+      <button class="duel-challenge-btn" data-uid="${p.uid}" data-nick="${escapeHtml(p.nickname)}" type="button">⚔</button>
     `;
     row.querySelector('.duel-challenge-btn').addEventListener('click', () => {
       if (network.duelState) { addKillfeed('Already in a duel!'); return; }
