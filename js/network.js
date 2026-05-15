@@ -126,10 +126,16 @@ export class Network {
     }));
 
     // Incoming hits
+    // Bug fix: onValue fires on every DB change (incl. our own remove()), so the same
+    // hit record appears in multiple snapshots before Firebase confirms deletion.
+    // We track processed hit IDs in a Set to avoid applying damage twice.
+    this._processedHits = new Set();
     this._unsubs.push(onValue(ref(this.db, hitsPath), snap => {
       const data = snap.val();
       if (!data) return;
       for (const [hitId, h] of Object.entries(data)) {
+        if (this._processedHits.has(hitId)) continue;   // 이미 처리한 히트 무시
+        this._processedHits.add(hitId);
         const itemRef = ref(this.db, `${hitsPath}/${hitId}`);
         if ((h.ts || 0) < this._respawnTime || this.isInvincible()) { remove(itemRef); continue; }
         this.myHealth = Math.max(0, this.myHealth - (h.damage || 15));
@@ -302,6 +308,7 @@ export class Network {
     const now = Date.now();
     this.myHealth     = 100;
     this._respawnTime = now;
+    this._processedHits = new Set();   // 리스폰 시 처리된 히트 목록 초기화
     this.deaths++;
     this.totalDeaths++;
     this.rating = Math.max(0, this.rating - 10);
