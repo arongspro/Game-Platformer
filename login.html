@@ -5,503 +5,207 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>VOID PROTOCOL — LOGIN</title>
 <script type="importmap">
-  {
-    "imports": {
-      "three":             "https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js",
-      "three/":            "https://cdn.jsdelivr.net/npm/three@0.158.0/",
-      "firebase/app":      "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js",
-      "firebase/database": "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js"
-    }
+{
+  "imports": {
+    "three":             "https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js",
+    "three/":            "https://cdn.jsdelivr.net/npm/three@0.158.0/",
+    "firebase/app":      "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js",
+    "firebase/database": "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js"
   }
-  </script>
+}
+</script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
 
-*{margin:0;padding:0;box-sizing:border-box;}
-body{
-  background:#070a10;
-  color:#00ffe0;
-  font-family:'Share Tech Mono',monospace;
-  min-height:100vh;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  overflow:hidden;
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  background: #070a10;
+  color: #00ffe0;
+  font-family: 'Share Tech Mono', monospace;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
 }
 
-/* 배경 격자 */
-body::before{
-  content:'';
-  position:fixed;inset:0;
+body::before {
+  content: '';
+  position: fixed; inset: 0;
   background:
-    linear-gradient(rgba(0,255,224,.04) 1px,transparent 1px),
-    linear-gradient(90deg,rgba(0,255,224,.04) 1px,transparent 1px);
-  background-size:40px 40px;
-  pointer-events:none;
+    linear-gradient(rgba(0,255,224,.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,255,224,.04) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
 }
 
-.container{
-  width:100%;
-  max-width:960px;
-  padding:24px;
-  display:flex;
-  gap:32px;
-  align-items:flex-start;
+body::after {
+  content: '';
+  position: fixed; inset: 0;
+  background: radial-gradient(ellipse 70% 60% at 50% 50%, rgba(0,255,224,0.04), transparent);
+  pointer-events: none;
 }
 
-/* ── 왼쪽 패널 ── */
-.left-panel{
-  flex:1;
-  min-width:280px;
+.container {
+  width: 100%;
+  max-width: 440px;
+  padding: 40px 32px;
+  background: rgba(0,0,0,0.6);
+  border: 1px solid rgba(0,255,224,0.2);
+  box-shadow: 0 0 60px rgba(0,255,224,0.07), inset 0 0 0 1px rgba(255,255,255,0.03);
+  backdrop-filter: blur(12px);
 }
 
-h1{
-  font-family:'Orbitron',monospace;
-  font-size:28px;
-  font-weight:900;
-  letter-spacing:6px;
-  text-shadow:0 0 30px #00ffe0;
-  margin-bottom:4px;
-}
-.subtitle{
-  font-size:10px;
-  letter-spacing:4px;
-  opacity:.4;
-  margin-bottom:32px;
+h1 {
+  font-family: 'Orbitron', monospace;
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: 6px;
+  text-shadow: 0 0 30px #00ffe0;
+  margin-bottom: 4px;
 }
 
-/* 탭 */
-.tabs{
-  display:flex;
-  gap:2px;
-  margin-bottom:24px;
-}
-.tab{
-  flex:1;
-  padding:10px;
-  background:transparent;
-  border:1px solid rgba(0,255,224,.2);
-  color:rgba(0,255,224,.4);
-  font-family:'Share Tech Mono',monospace;
-  font-size:12px;
-  letter-spacing:3px;
-  cursor:pointer;
-  transition:all .2s;
-}
-.tab.active{
-  background:rgba(0,255,224,.1);
-  border-color:rgba(0,255,224,.6);
-  color:#00ffe0;
+.subtitle {
+  font-size: 10px;
+  letter-spacing: 4px;
+  opacity: .4;
+  margin-bottom: 36px;
 }
 
-/* 폼 */
-.form-group{
-  margin-bottom:16px;
-}
-label{
-  display:block;
-  font-size:10px;
-  letter-spacing:3px;
-  opacity:.5;
-  margin-bottom:6px;
-}
-input[type=text],input[type=password]{
-  width:100%;
-  background:rgba(0,255,224,.05);
-  border:1px solid rgba(0,255,224,.25);
-  color:#00ffe0;
-  font-family:'Share Tech Mono',monospace;
-  font-size:14px;
-  padding:10px 14px;
-  outline:none;
-  transition:border-color .2s;
-}
-input:focus{border-color:rgba(0,255,224,.7);}
-
-.btn{
-  width:100%;
-  padding:13px;
-  background:transparent;
-  border:1px solid rgba(0,255,224,.5);
-  color:#00ffe0;
-  font-family:'Orbitron',monospace;
-  font-size:12px;
-  letter-spacing:4px;
-  cursor:pointer;
-  transition:all .2s;
-  margin-top:8px;
-}
-.btn:hover{background:rgba(0,255,224,.1);box-shadow:0 0 20px rgba(0,255,224,.15);}
-.btn:disabled{opacity:.3;cursor:not-allowed;}
-.btn.primary{border-color:#00ffe0;box-shadow:0 0 10px rgba(0,255,224,.1);}
-
-.error-msg{
-  color:#ff3c3c;
-  font-size:11px;
-  letter-spacing:2px;
-  margin-top:10px;
-  min-height:16px;
-}
-.success-msg{
-  color:#00ffe0;
-  font-size:11px;
-  letter-spacing:2px;
-  margin-top:10px;
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 28px;
 }
 
-/* ── 오른쪽 패널: 픽셀 커스터마이저 ── */
-.right-panel{
-  width:340px;
-  flex-shrink:0;
+.tab {
+  flex: 1;
+  padding: 10px;
+  background: transparent;
+  border: 1px solid rgba(0,255,224,.2);
+  color: rgba(0,255,224,.4);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 3px;
+  cursor: pointer;
+  transition: all .2s;
+}
+.tab.active {
+  background: rgba(0,255,224,.1);
+  border-color: rgba(0,255,224,.6);
+  color: #00ffe0;
+}
+.tab:hover:not(.active) { border-color: rgba(0,255,224,.35); color: rgba(0,255,224,.65); }
+
+.form-group { margin-bottom: 18px; }
+
+label {
+  display: block;
+  font-size: 9px;
+  letter-spacing: 3px;
+  opacity: .5;
+  margin-bottom: 7px;
 }
 
-.panel-title{
-  font-family:'Orbitron',monospace;
-  font-size:11px;
-  letter-spacing:4px;
-  opacity:.6;
-  margin-bottom:16px;
+input[type=text], input[type=password] {
+  width: 100%;
+  background: rgba(0,255,224,.05);
+  border: 1px solid rgba(0,255,224,.25);
+  color: #00ffe0;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 14px;
+  padding: 11px 14px;
+  outline: none;
+  transition: border-color .2s, box-shadow .2s;
+}
+input:focus {
+  border-color: rgba(0,255,224,.7);
+  box-shadow: 0 0 0 2px rgba(0,255,224,0.08);
 }
 
-/* 픽셀 그리드 */
-.pixel-editor-wrap{
-  display:flex;
-  gap:20px;
-  align-items:flex-start;
+.btn {
+  width: 100%;
+  padding: 14px;
+  background: transparent;
+  border: 1px solid rgba(0,255,224,.5);
+  color: #00ffe0;
+  font-family: 'Orbitron', monospace;
+  font-size: 12px;
+  letter-spacing: 4px;
+  cursor: pointer;
+  transition: all .2s;
+  margin-top: 8px;
 }
+.btn:hover { background: rgba(0,255,224,.1); box-shadow: 0 0 20px rgba(0,255,224,.15); }
+.btn:disabled { opacity: .3; cursor: not-allowed; }
+.btn.primary { border-color: #00ffe0; box-shadow: 0 0 12px rgba(0,255,224,.12); }
 
-#pixel-canvas{
-  image-rendering:pixelated;
-  cursor:crosshair;
-  border:1px solid rgba(0,255,224,.3);
-  display:block;
+.error-msg {
+  color: #ff3c3c;
+  font-size: 11px;
+  letter-spacing: 2px;
+  margin-top: 12px;
+  min-height: 16px;
 }
-
-/* 팔레트 */
-.palette-wrap{
-  display:flex;
-  flex-direction:column;
-  gap:8px;
-}
-.palette-label{
-  font-size:9px;
-  letter-spacing:3px;
-  opacity:.4;
-}
-.color-grid{
-  display:grid;
-  grid-template-columns:repeat(4,22px);
-  gap:3px;
-}
-.color-swatch{
-  width:22px;height:22px;
-  border:2px solid transparent;
-  cursor:pointer;
-  transition:border-color .1s;
-}
-.color-swatch.selected{border-color:#fff;}
-.color-swatch.eraser{
-  background: repeating-linear-gradient(
-    45deg,
-    #333 0px, #333 4px,
-    #555 4px, #555 8px
-  ) !important;
-}
-
-/* 커스텀 색 선택 */
-.custom-color-wrap{
-  margin-top:8px;
-  display:flex;
-  flex-direction:column;
-  gap:4px;
-}
-.custom-color-wrap label{font-size:9px;letter-spacing:3px;opacity:.4;}
-#custom-color{
-  width:100%;height:28px;
-  border:1px solid rgba(0,255,224,.3);
-  background:transparent;
-  cursor:pointer;
-  padding:0 2px;
-}
-
-.pixel-actions{
-  margin-top:12px;
-  display:flex;
-  gap:8px;
-}
-.pixel-actions button{
-  flex:1;
-  padding:7px;
-  background:transparent;
-  border:1px solid rgba(0,255,224,.3);
-  color:rgba(0,255,224,.7);
-  font-family:'Share Tech Mono',monospace;
-  font-size:10px;
-  letter-spacing:2px;
-  cursor:pointer;
-  transition:all .15s;
-}
-.pixel-actions button:hover{border-color:#00ffe0;color:#00ffe0;}
-
-/* 프리뷰 */
-.preview-wrap{
-  margin-top:16px;
-  display:flex;
-  flex-direction:column;
-  gap:8px;
-}
-.preview-label{font-size:9px;letter-spacing:3px;opacity:.4;}
-#preview-canvas{
-  image-rendering:pixelated;
-  border:1px solid rgba(0,255,224,.2);
-  display:block;
-}
-/* 3D 캐릭터 프리뷰 */
-.char-preview-wrap{
-  display:flex;
-  align-items:flex-end;
-  gap:12px;
-  margin-top:8px;
-}
-.char-figure{
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  gap:1px;
-}
-.char-figure canvas{
-  image-rendering:pixelated;
-  display:block;
+.success-msg {
+  color: #00ffe0;
+  font-size: 11px;
+  letter-spacing: 2px;
+  margin-top: 12px;
 }
 </style>
 </head>
 <body>
 
 <div class="container">
-  <!-- 왼쪽: 로그인/회원가입 -->
-  <div class="left-panel">
-    <h1>VOID PROTOCOL</h1>
-    <p class="subtitle">MULTIPLAYER · PARKOUR · FPS</p>
+  <h1>VOID PROTOCOL</h1>
+  <p class="subtitle">MULTIPLAYER · PARKOUR · FPS</p>
 
-    <div class="tabs">
-      <button class="tab active" id="tab-login"  onclick="switchTab('login')">[ LOGIN ]</button>
-      <button class="tab"        id="tab-register" onclick="switchTab('register')">[ REGISTER ]</button>
-    </div>
-
-    <!-- 로그인 -->
-    <div id="panel-login">
-      <div class="form-group">
-        <label>NICKNAME</label>
-        <input type="text" id="login-nick" placeholder="닉네임 입력" maxlength="12" autocomplete="off"/>
-      </div>
-      <div class="form-group">
-        <label>PASSWORD</label>
-        <input type="password" id="login-pw" placeholder="비밀번호 입력"/>
-      </div>
-      <button class="btn primary" id="login-btn" onclick="doLogin()">[ ENTER GAME ]</button>
-      <div class="error-msg" id="login-err"></div>
-    </div>
-
-    <!-- 회원가입 -->
-    <div id="panel-register" style="display:none">
-      <div class="form-group">
-        <label>NICKNAME <span style="opacity:.4;font-size:9px">2~12자</span></label>
-        <input type="text" id="reg-nick" placeholder="닉네임 입력" maxlength="12" autocomplete="off"/>
-      </div>
-      <div class="form-group">
-        <label>PASSWORD <span style="opacity:.4;font-size:9px">4자 이상</span></label>
-        <input type="password" id="reg-pw" placeholder="비밀번호 입력"/>
-      </div>
-      <button class="btn primary" id="reg-btn" onclick="doRegister()">[ CREATE ACCOUNT ]</button>
-      <div class="error-msg" id="reg-err"></div>
-      <div class="success-msg" id="reg-ok"></div>
-    </div>
+  <div class="tabs">
+    <button class="tab active" id="tab-login"    onclick="switchTab('login')">[ LOGIN ]</button>
+    <button class="tab"        id="tab-register" onclick="switchTab('register')">[ REGISTER ]</button>
   </div>
 
-  <!-- 오른쪽: 픽셀 캐릭터 에디터 -->
-  <div class="right-panel">
-    <div class="panel-title">CHARACTER CUSTOMIZER</div>
-    <div class="pixel-editor-wrap">
-      <div>
-        <canvas id="pixel-canvas" width="192" height="192"></canvas>
-        <div class="pixel-actions">
-          <button onclick="clearCanvas()">CLEAR</button>
-          <button onclick="resetDefault()">RESET</button>
-        </div>
-        <div class="preview-wrap">
-          <span class="preview-label">PREVIEW</span>
-          <div class="char-preview-wrap">
-            <!-- 정면 -->
-            <div class="char-figure">
-              <canvas id="prev-head"  width="8" height="8"  style="width:32px;height:32px"></canvas>
-              <canvas id="prev-body"  width="10" height="12" style="width:40px;height:48px"></canvas>
-              <div style="display:flex;gap:1px">
-                <canvas id="prev-legl" width="4" height="8" style="width:16px;height:32px"></canvas>
-                <canvas id="prev-legr" width="4" height="8" style="width:16px;height:32px"></canvas>
-              </div>
-            </div>
-          </div>
-          <!-- 숨긴 16×16 플랫 프리뷰 (데이터 소스용) -->
-          <canvas id="preview-canvas" width="16" height="16" style="display:none"></canvas>
-        </div>
-      </div>
-
-      <div class="palette-wrap">
-        <div class="palette-label">COLORS</div>
-        <div class="color-grid" id="color-grid"></div>
-        <div class="custom-color-wrap">
-          <label>CUSTOM</label>
-          <input type="color" id="custom-color" value="#4477bb"/>
-        </div>
-        <div class="palette-label" style="margin-top:8px">TOOL</div>
-        <div class="color-grid">
-          <div class="color-swatch eraser" title="지우개" onclick="selectEraser()"></div>
-        </div>
-      </div>
+  <!-- 로그인 -->
+  <div id="panel-login">
+    <div class="form-group">
+      <label>NICKNAME</label>
+      <input type="text" id="login-nick" placeholder="닉네임 입력" maxlength="12" autocomplete="off"/>
     </div>
+    <div class="form-group">
+      <label>PASSWORD</label>
+      <input type="password" id="login-pw" placeholder="비밀번호 입력"/>
+    </div>
+    <button class="btn primary" id="login-btn" onclick="doLogin()">[ ENTER GAME ]</button>
+    <div class="error-msg" id="login-err"></div>
+  </div>
+
+  <!-- 회원가입 -->
+  <div id="panel-register" style="display:none">
+    <div class="form-group">
+      <label>NICKNAME <span style="opacity:.4;font-size:9px">2~12자</span></label>
+      <input type="text" id="reg-nick" placeholder="닉네임 입력" maxlength="12" autocomplete="off"/>
+    </div>
+    <div class="form-group">
+      <label>PASSWORD <span style="opacity:.4;font-size:9px">4자 이상</span></label>
+      <input type="password" id="reg-pw" placeholder="비밀번호 입력"/>
+    </div>
+    <button class="btn primary" id="reg-btn" onclick="doRegister()">[ CREATE ACCOUNT ]</button>
+    <div class="error-msg" id="reg-err"></div>
+    <div class="success-msg" id="reg-ok"></div>
   </div>
 </div>
 
 <script type="module">
 import { register, login, DEFAULT_PIXELS } from './js/auth.js';
 
-// ── 픽셀 에디터 ──
-const GRID = 16, CELL = 12; // 12px per cell → 192x192 canvas
-const canvas  = document.getElementById('pixel-canvas');
-const ctx     = canvas.getContext('2d');
-const preview = document.getElementById('preview-canvas');
-const pctx    = preview.getContext('2d');
-
-let pixels      = DEFAULT_PIXELS.map(r => [...r]);
-let currentColor = '#4477bb';
-let isErasing    = false;
-let isDrawing    = false;
-
-const PALETTE = [
-  '#4477bb','#2255aa','#3366aa','#ffffff',
-  '#ffcc33','#ff6633','#cc3333','#993333',
-  '#33cc66','#226644','#88aaff','#334466',
-  '#ffaacc','#cc88ff','#aaaaaa','#333333',
-];
-
-// 팔레트 렌더
-const grid = document.getElementById('color-grid');
-PALETTE.forEach(col => {
-  const sw = document.createElement('div');
-  sw.className = 'color-swatch';
-  sw.style.background = col;
-  sw.title = col;
-  if (col === currentColor) sw.classList.add('selected');
-  sw.onclick = () => {
-    isErasing = false;
-    currentColor = col;
-    document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
-    sw.classList.add('selected');
-  };
-  grid.appendChild(sw);
-});
-
-document.getElementById('custom-color').addEventListener('input', e => {
-  isErasing = false;
-  currentColor = e.target.value;
-  document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
-});
-
-window.selectEraser = () => {
-  isErasing = true;
-  document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
-  document.querySelector('.color-swatch.eraser').classList.add('selected');
-};
-
-// 픽셀 그리기
-function drawGrid() {
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  for (let y=0;y<GRID;y++) {
-    for (let x=0;x<GRID;x++) {
-      const col = pixels[y][x];
-      if (col) {
-        ctx.fillStyle = col;
-        ctx.fillRect(x*CELL, y*CELL, CELL, CELL);
-      } else {
-        // 투명 격자
-        ctx.fillStyle = (x+y)%2===0 ? '#1a1a1a' : '#111111';
-        ctx.fillRect(x*CELL, y*CELL, CELL, CELL);
-      }
-    }
-  }
-  // 격자선
-  ctx.strokeStyle = 'rgba(0,255,224,0.08)';
-  ctx.lineWidth = 0.5;
-  for (let i=0;i<=GRID;i++) {
-    ctx.beginPath(); ctx.moveTo(i*CELL,0); ctx.lineTo(i*CELL,GRID*CELL); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0,i*CELL); ctx.lineTo(GRID*CELL,i*CELL); ctx.stroke();
-  }
-  drawPreview();
-}
-
-function drawPreview() {
-  // 숨긴 플랫 캔버스 (데이터 소스)
-  pctx.clearRect(0,0,16,16);
-  for (let y=0;y<GRID;y++)
-    for (let x=0;x<GRID;x++)
-      if (pixels[y][x]) { pctx.fillStyle=pixels[y][x]; pctx.fillRect(x,y,1,1); }
-
-  // ── 캐릭터 파츠 프리뷰 ──
-  // 각 파츠별 픽셀 영역을 해당 canvas에 그림
-  const drawPart = (canvasId, sx, ex, sy, ey) => {
-    const el = document.getElementById(canvasId);
-    if (!el) return;
-    const w = ex-sx+1, h = ey-sy+1;
-    el.width = w; el.height = h;
-    const ctx2 = el.getContext('2d');
-    ctx2.clearRect(0,0,w,h);
-    for (let y=sy; y<=ey; y++) {
-      for (let x=sx; x<=ex; x++) {
-        const col = pixels[y]?.[x];
-        if (col) { ctx2.fillStyle=col; ctx2.fillRect(x-sx, y-sy, 1, 1); }
-      }
-    }
-  };
-
-  drawPart('prev-head', 4, 11, 0,  4);   // 머리
-  drawPart('prev-body', 3, 12, 5, 10);   // 몸통 (팔 포함)
-  drawPart('prev-legl', 4,  7, 11,15);   // 왼다리
-  drawPart('prev-legr', 8, 11, 11,15);   // 오른다리
-}
-
-function paint(e) {
-  const rect = canvas.getBoundingClientRect();
-  const scaleX = canvas.width  / rect.width;
-  const scaleY = canvas.height / rect.height;
-  const cx = e.clientX - rect.left;
-  const cy = e.clientY - rect.top;
-  const gx = Math.floor(cx * scaleX / CELL);
-  const gy = Math.floor(cy * scaleY / CELL);
-  if (gx<0||gx>=GRID||gy<0||gy>=GRID) return;
-  pixels[gy][gx] = isErasing ? null : currentColor;
-  drawGrid();
-}
-
-canvas.addEventListener('mousedown', e => { isDrawing=true; paint(e); });
-canvas.addEventListener('mousemove', e => { if(isDrawing) paint(e); });
-window.addEventListener('mouseup', () => isDrawing=false);
-
-// 터치 지원
-canvas.addEventListener('touchstart', e => { e.preventDefault(); isDrawing=true; paint(e.touches[0]); }, {passive:false});
-canvas.addEventListener('touchmove',  e => { e.preventDefault(); if(isDrawing) paint(e.touches[0]); }, {passive:false});
-window.addEventListener('touchend',   () => isDrawing=false);
-
-window.clearCanvas  = () => { pixels=Array.from({length:16},()=>Array(16).fill(null)); drawGrid(); };
-window.resetDefault = () => { pixels=DEFAULT_PIXELS.map(r=>[...r]); drawGrid(); };
-
-drawGrid();
-
 // ── 탭 전환 ──
 window.switchTab = (tab) => {
-  document.getElementById('panel-login').style.display    = tab==='login'    ? '' : 'none';
-  document.getElementById('panel-register').style.display = tab==='register' ? '' : 'none';
-  document.getElementById('tab-login').classList.toggle('active',    tab==='login');
-  document.getElementById('tab-register').classList.toggle('active', tab==='register');
+  document.getElementById('panel-login').style.display    = tab === 'login'    ? '' : 'none';
+  document.getElementById('panel-register').style.display = tab === 'register' ? '' : 'none';
+  document.getElementById('tab-login').classList.toggle('active',    tab === 'login');
+  document.getElementById('tab-register').classList.toggle('active', tab === 'register');
 };
 
 // ── 로그인 ──
@@ -515,7 +219,6 @@ window.doLogin = async () => {
     const nick = document.getElementById('login-nick').value;
     const pw   = document.getElementById('login-pw').value;
     const user = await login(nick, pw);
-    // 세션 저장 후 게임으로
     sessionStorage.setItem('vp_user', JSON.stringify(user));
     window.location.href = 'index.html';
   } catch(e) {
@@ -524,14 +227,6 @@ window.doLogin = async () => {
     btn.textContent = '[ ENTER GAME ]';
   }
 };
-
-// Enter 키 로그인
-document.getElementById('login-pw').addEventListener('keydown', e => {
-  if (e.key==='Enter') window.doLogin();
-});
-document.getElementById('login-nick').addEventListener('keydown', e => {
-  if (e.key==='Enter') document.getElementById('login-pw').focus();
-});
 
 // ── 회원가입 ──
 window.doRegister = async () => {
@@ -544,11 +239,10 @@ window.doRegister = async () => {
   try {
     const nick = document.getElementById('reg-nick').value;
     const pw   = document.getElementById('reg-pw').value;
-    await register(nick, pw, pixels);
-    ok.textContent  = `✅ "${nick}" 계정 생성 완료! 로그인 해주세요.`;
+    await register(nick, pw, DEFAULT_PIXELS);
+    ok.textContent  = '✅ "' + nick + '" 계정 생성 완료! 로그인 해주세요.';
     btn.disabled    = false;
     btn.textContent = '[ CREATE ACCOUNT ]';
-    // 로그인 탭으로 이동
     setTimeout(() => {
       window.switchTab('login');
       document.getElementById('login-nick').value = nick;
@@ -560,8 +254,15 @@ window.doRegister = async () => {
   }
 };
 
+// ── Enter 키 지원 ──
+document.getElementById('login-nick').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('login-pw').focus();
+});
+document.getElementById('login-pw').addEventListener('keydown', e => {
+  if (e.key === 'Enter') window.doLogin();
+});
 document.getElementById('reg-pw').addEventListener('keydown', e => {
-  if (e.key==='Enter') window.doRegister();
+  if (e.key === 'Enter') window.doRegister();
 });
 </script>
 </body>
