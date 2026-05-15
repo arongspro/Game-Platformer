@@ -923,7 +923,7 @@ export class Player {
 
     // Walking bob
     if (isMoving && !this.isJumping && !this.isSliding) {
-      this.moveTime += this.baseSpeed * 2.25 * scale;
+      this.moveTime += this.baseSpeed * 1.4 * scale;
       this.bobAmp   += (1 - this.bobAmp) * 0.1 * scale;
     } else {
       this.bobAmp += (0 - this.bobAmp) * 0.1 * scale;
@@ -1193,8 +1193,8 @@ export class Player {
     const recoilZ   = this.recoilOffset;
     const recoilY   = this.recoilOffset * 0.08;
     const bobFactor = ads > 0.5 ? 0.15 : 1.0;
-    const bobX = Math.cos(this.moveTime * 5)  * 0.005 * this.bobAmp * bobFactor;
-    const bobY = Math.sin(this.moveTime * 10) * 0.005 * this.bobAmp * bobFactor;
+    const bobX = Math.cos(this.moveTime * 2.5) * 0.004 * this.bobAmp * bobFactor;
+    const bobY = Math.sin(this.moveTime * 5)   * 0.004 * this.bobAmp * bobFactor;
 
     // ── Grenade ──
     if (slot === 4) {
