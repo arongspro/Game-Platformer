@@ -1180,6 +1180,12 @@ export class Player {
   }
 
   getSnapshot(camCtrl) {
+    // 활성 수류탄 위치 수집 → 상대방 화면에 렌더링 (Bug fix: grenades were not sent)
+    const grenades = this.grenadeSystem
+      ? this.grenadeSystem.grenades
+          .filter(g => !g.exploded)
+          .map(g => ({ px: g.mesh.position.x, py: g.mesh.position.y, pz: g.mesh.position.z }))
+      : [];
     return {
       pos:        this.pos.toArray(),
       yaw:        camCtrl.yaw,
@@ -1189,6 +1195,7 @@ export class Player {
       is_sliding: this.isSliding,
       recoil:     this.recoilOffset,
       is_aiming:  this.isAiming,
+      grenades,
     };
   }
 
