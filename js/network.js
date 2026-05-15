@@ -150,6 +150,7 @@ export class Network {
       const keys = Object.keys(data).sort();
       if (keys.length > MAX_CHAT_MSGS)
         keys.slice(0, keys.length - MAX_CHAT_MSGS)
+            .filter(k => k.startsWith(this.myUid))   // 자기 메시지만 삭제 가능 (Firebase 규칙 준수)
             .forEach(k => remove(ref(this.db, `${chatPath}/${k}`)).catch(() => {}));
       Object.values(data)
         .filter(m => m?.ts > this._chatSince)
