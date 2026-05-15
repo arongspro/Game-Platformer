@@ -61,6 +61,7 @@ export class Network {
     this.onKill          = null;
     this.onRoomUpdate    = null;
     this.onChat          = null;
+    this.onExplosion     = null;  // (pos, type) => void
 
     if (this.myUid) {
       this._setupListeners();
@@ -142,6 +143,20 @@ export class Network {
         this.onHealthUpdate?.(this.myHealth);
         this.onHit?.(h.damage || 15);
         remove(itemRef);
+      }
+    }));
+
+    // Explosions (grenade + RPG)
+    const exploPath = this._path('explosions');
+    this._unsubs.push(onValue(ref(this.db, exploPath), snap => {
+      if (!this.onExplosion) return;
+      const data = snap.val();
+      if (!data) return;
+      const now = Date.now();
+      for (const [key, e] of Object.entries(data)) {
+        if (!e?.ts || now - e.ts > 3000) continue;   // 3초 이상 오래된 이벤트 무시
+        if (e.uid === this.myUid) continue;            // 내가 보낸 폭발은 이미 로컬에서 처리
+        this.onExplosion([e.x ?? 0, e.y ?? 0, e.z ?? 0], e.type || 'grenade');
       }
     }));
 
@@ -263,6 +278,7 @@ export class Network {
       recoil:      snapshot.recoil,
       is_aiming:   snapshot.is_aiming,
       grenades:    snapshot.grenades || [],
+      rockets:     snapshot.rockets  || [],
       ts:          now,
     }).catch(e => { if (e.code !== 'PERMISSION_DENIED') console.warn('[Network] sendUpdate/state:', e.message); });
     update(ref(this.db, this._path('meta')), {
@@ -321,6 +337,17 @@ export class Network {
       kills: this.kills, deaths: this.deaths, totalKills: this.totalKills,
       totalDeaths: this.totalDeaths, rating: this.rating, health_reset: true, ts: now,
     }).catch(() => {});
+  }
+
+  sendExplosion(posArr, type = 'grenade') {
+    if (!this.myUid) return;
+    const key = `${this.myUid}_${Date.now()}`;
+    set(ref(this.db, this._path(`explosions/${key}`)), {
+      uid: this.myUid, x: posArr[0], y: posArr[1], z: posArr[2],
+      type, ts: Date.now(),
+    }).catch(() => {});
+    // 5초 후 자동 삭제 (Firebase Rules 없이 수동 cleanup)
+    setTimeout(() => remove(ref(this.db, this._path(`explosions/${key}`))).catch(() => {}), 5000);
   }
 
   sendChat(text) {
