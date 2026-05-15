@@ -785,9 +785,84 @@ export class Renderer {
     }
   }
 
+  // ── RPG 로켓 폭발 이펙트 (수류탄과 유사하지만 더 크고 강렬) ──
+  spawnRocketExplosion(pos) {
+
+    // 플래시 (더 큼)
+    const flashGeo = new THREE.SphereGeometry(0.5, 8, 8);
+    const flashMat = new THREE.MeshBasicMaterial({ color: 0xff6600, transparent: true, opacity: 1 });
+    const flash = new THREE.Mesh(flashGeo, flashMat);
+    flash.position.copy(pos);
+    this.scene.add(flash);
+    this.particles.push({ mesh: flash, life: 1, maxLife: 1, type: 'rpg_flash', vel: null, baseSize: 0.5 });
+
+    // 화염구 파티클 (많고 큼)
+    for (let i = 0; i < 20; i++) {
+      const size = 0.20 + Math.random() * 0.50;
+      const geo  = new THREE.SphereGeometry(size, 6, 6);
+      const mat  = new THREE.MeshBasicMaterial({
+        color: new THREE.Color().setHSL(0.04 + Math.random() * 0.06, 1, 0.45 + Math.random() * 0.25),
+        transparent: true, opacity: 0.95
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.copy(pos);
+      const vel = new THREE.Vector3(
+        (Math.random() - 0.5) * 0.35,
+        Math.random() * 0.30 + 0.08,
+        (Math.random() - 0.5) * 0.35
+      );
+      this.scene.add(mesh);
+      this.particles.push({ mesh, vel, life: 1, maxLife: 1.2, type: 'rpg_fire', scale: size, baseSize: size });
+    }
+
+    // 연기 (크고 오래)
+    for (let i = 0; i < 14; i++) {
+      const geo = new THREE.SphereGeometry(0.30 + Math.random() * 0.30, 5, 5);
+      const mat = new THREE.MeshBasicMaterial({ color: 0x333333, transparent: true, opacity: 0.65 });
+      const mesh = new THREE.Mesh(geo, mat);
+      const spread = new THREE.Vector3(Math.random()-0.5, Math.random(), Math.random()-0.5).normalize();
+      mesh.position.copy(pos).addScaledVector(spread, Math.random() * 2.2);
+      const vel = new THREE.Vector3(
+        (Math.random() - 0.5) * 0.05,
+        0.03 + Math.random() * 0.04,
+        (Math.random() - 0.5) * 0.05
+      );
+      this.scene.add(mesh);
+      this.particles.push({ mesh, vel, life: 1, maxLife: 3.5, type: 'rpg_smoke', scale: 0.30 + Math.random() * 0.30, baseSize: 1 });
+    }
+
+    // 파편 (작고 빠름)
+    for (let i = 0; i < 24; i++) {
+      const geo  = new THREE.BoxGeometry(0.05, 0.05, 0.12);
+      const mat  = new THREE.MeshBasicMaterial({ color: 0x666666 });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.copy(pos);
+      const vel = new THREE.Vector3(
+        (Math.random() - 0.5) * 0.55,
+        Math.random() * 0.50 + 0.15,
+        (Math.random() - 0.5) * 0.55
+      );
+      this.scene.add(mesh);
+      this.particles.push({ mesh, vel, life: 1, maxLife: 0.9, type: 'rpg_debris', baseSize: 1 });
+    }
+
+    // 충격파 링 (두 개)
+    for (let ri = 0; ri < 2; ri++) {
+      const ringGeo = new THREE.TorusGeometry(0.15, 0.06, 6, 20);
+      const ringMat = new THREE.MeshBasicMaterial({ color: ri === 0 ? 0xff8800 : 0xffdd00, transparent: true, opacity: 0.9 });
+      const ring    = new THREE.Mesh(ringGeo, ringMat);
+      ring.position.copy(pos);
+      ring.rotation.x = Math.PI / 2;
+      this.scene.add(ring);
+      this.particles.push({ mesh: ring, life: 1, maxLife: 0.55 + ri * 0.15, type: 'rpg_ring', baseSize: 1 });
+    }
+  }
+
   updateParticles(dt) {
     this.particles = this.particles.filter(p => {
-      p.life -= dt * 1.2;
+      // rpg 파티클은 maxLife 기반으로 수명 감소 (수류탄과 동일 패턴)
+      if (p.maxLife) p.life -= dt / p.maxLife;
+      else           p.life -= dt * 1.2;
       if (p.life <= 0) { this.scene.remove(p.mesh); return false; }
       if (p.type === 'muzzle') {
         const s = Math.max(0.2, p.life * 8);
@@ -803,6 +878,43 @@ export class Renderer {
         p.mesh.rotation.x += 0.24;
         p.mesh.rotation.z += 0.18;
         p.mesh.material.opacity = Math.max(0, p.life * 1.8);
+        return true;
+      }
+      // ── RPG 폭발 파티클 ──
+      if (p.type === 'rpg_flash') {
+        const s = 1 + (1 - p.life) * 12;
+        p.mesh.scale.setScalar(s);
+        p.mesh.material.opacity = p.life;
+        return true;
+      }
+      if (p.type === 'rpg_fire') {
+        p.vel.y -= 0.004;
+        p.mesh.position.addScaledVector(p.vel, 60 * dt);
+        p.mesh.scale.setScalar(p.life * 1.8);
+        p.mesh.material.opacity = p.life * 0.92;
+        p.mesh.material.color.setHSL(0.05 * p.life, 1, 0.5);
+        return true;
+      }
+      if (p.type === 'rpg_smoke') {
+        p.mesh.position.addScaledVector(p.vel, 60 * dt);
+        p.vel.y += 0.001;
+        const s = p.scale * (1 + (1 - p.life) * 4);
+        p.mesh.scale.setScalar(s / p.scale);
+        p.mesh.material.opacity = p.life * 0.52;
+        return true;
+      }
+      if (p.type === 'rpg_debris') {
+        p.vel.y -= 0.018;
+        p.mesh.position.addScaledVector(p.vel, 60 * dt);
+        p.mesh.rotation.x += 0.28;
+        p.mesh.rotation.z += 0.20;
+        p.mesh.material.opacity = p.life;
+        return true;
+      }
+      if (p.type === 'rpg_ring') {
+        const s = 1 + (1 - p.life) * 18;
+        p.mesh.scale.setScalar(s);
+        p.mesh.material.opacity = p.life * 0.75;
         return true;
       }
       p.vel.y += 0.0005; p.vel.multiplyScalar(0.93);
