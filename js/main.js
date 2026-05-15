@@ -255,12 +255,7 @@ function updateHud() {
   healthFill.className   = pct <= 0.3 ? 'crit' : pct <= 0.6 ? 'warn' : '';
   healthNum.style.color  = pct <= 0.3 ? '#ff3c3c' : pct <= 0.6 ? '#ffcc00' : '';
 
-  if (slot === 6) {
-    ammoCurrentEl.textContent = '🚀 ' + player.rpgCount;
-    ammoMaxEl.textContent     = `/ ${player.maxRpgCount}  [${player.rpgReserve}]`;
-    ammoMode.textContent      = player.rpgReloading ? '[RELOADING...]' : '[RPG-7]';
-    ammoCurrentEl.classList.remove('sniper-ammo');
-  } else if (slot === 1 || slot === 2 || slot === 5) {
+  if (slot === 1 || slot === 2 || slot === 5) {
     ammoCurrentEl.textContent = weaponState.ammo;
     ammoMaxEl.textContent     = `/ ${weapon.maxAmmo}  [${weaponState.reserve}]`;
     ammoMode.textContent      = weaponState.reloading ? '[RELOADING...]' : `[${weapon.mode}] ${weapon.name}`;
@@ -278,7 +273,7 @@ function updateHud() {
     ammoCurrentEl.classList.remove('sniper-ammo');
   }
 
-  reloadBar.classList.toggle('blocked',  !isAtBase() && slot !== 4 && slot !== 6);
+  reloadBar.classList.toggle('blocked',  !isAtBase() && slot !== 4);
   reloadBar.classList.toggle('visible',  player.isReloading || player.sniperReloading || player.pistolReloading || player.rpgReloading || !!weaponState.reloading);
   bandageBar.classList.toggle('visible', player.isBandaging);
 
@@ -930,8 +925,6 @@ function loop() {
     if (slot6El) slot6El.classList.toggle('active', player.weaponSlot === 6);
     if (grenadeCountUI) grenadeCountUI.textContent = `×${player.grenadeCount}`;
     if (bandageCountUI) bandageCountUI.textContent = `×${player.bandageCount}`;
-    const rpgCountUI = document.getElementById('rpg-count-ui');
-    if (rpgCountUI) rpgCountUI.textContent = `×${player.rpgCount}`;
     // Update slot names to show actual weapon names
     const w1 = player.getLoadoutWeapon(1);
     const w2 = player.getLoadoutWeapon(2);
