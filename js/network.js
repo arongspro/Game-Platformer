@@ -35,6 +35,7 @@ export class Network {
 
     this.otherPlayers = {};
     this.myHealth     = 100;
+    this.currentMapId = 'spire';
     this.roomId       = (localStorage.getItem('vp_room_id')   || 'PUBLIC').toUpperCase();
     this.roomName     = localStorage.getItem('vp_room_name')  || 'PUBLIC';
     this.matchLimit   = Number(localStorage.getItem('vp_match_limit') || 10);
@@ -277,6 +278,7 @@ export class Network {
       is_aiming:   snapshot.is_aiming,
       grenades:    snapshot.grenades || [],
       rockets:     snapshot.rockets  || [],
+      mapId:       snapshot.mapId   || 'spire',
       ts:          now,
     }).catch(e => { if (e.code !== 'PERMISSION_DENIED') console.warn('[Network] sendUpdate/state:', e.message); });
     update(ref(this.db, this._path('meta')), {
@@ -333,7 +335,8 @@ export class Network {
     set(ref(this.db, this._path(`state/${this.myUid}`)),   {
       pos, nickname: this.nickname, pixels: this.pixels,
       kills: this.kills, deaths: this.deaths, totalKills: this.totalKills,
-      totalDeaths: this.totalDeaths, rating: this.rating, health_reset: true, ts: now,
+      totalDeaths: this.totalDeaths, rating: this.rating, health_reset: true,
+      mapId: this.currentMapId || 'spire', ts: now,
     }).catch(() => {});
   }
 
