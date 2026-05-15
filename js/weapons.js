@@ -9,7 +9,7 @@ export const WEAPON_CATALOG = [
   { id:'burst', name:'PULSE', icon:'U', mode:'BURST', auto:false, maxAmmo:24, reserve:96, reload:72, fireRate:16, recoil:0.24, damage:{ HEAD:24, BODY:12, LEGS:6 }, color:'#ff66c4' },
   { id:'rail', name:'RAIL', icon:'X', mode:'CHARGE', auto:false, maxAmmo:3, reserve:15, reload:145, fireRate:62, recoil:0.72, damage:{ HEAD:90, BODY:52, LEGS:24 }, color:'#66a6ff' },
   { id:'carbine', name:'CARBINE', icon:'C', mode:'AUTO', auto:true, maxAmmo:26, reserve:104, reload:66, fireRate:6, recoil:0.18, damage:{ HEAD:19, BODY:10, LEGS:6 }, color:'#ffffff' },
-  { id:'rpg', name:'RPG-7', icon:'🚀', mode:'ROCKET', auto:false, maxAmmo:1, reserve:3, reload:110, fireRate:60, recoil:0.9, isProjectile:true, projectileSpeed:0.55, splashRadius:8.0, damage:{ HEAD:60, BODY:40, LEGS:40 }, color:'#ff4400' },
+  { id:'rpg', name:'RPG-7', icon:'🚀', mode:'ROCKET', auto:false, maxAmmo:1, reserve:12, reload:110, fireRate:60, recoil:0.9, isProjectile:true, projectileSpeed:0.55, splashRadius:8.0, damage:{ HEAD:60, BODY:40, LEGS:40 }, color:'#ff4400' },
 ];
 
 export const DEFAULT_LOADOUT = ['m4a1', 'sniper', 'pistol'];
