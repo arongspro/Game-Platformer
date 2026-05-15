@@ -143,6 +143,9 @@ export class GrenadeSystem {
     this._spawnExplosion(pos);
   }
 
+  // Public alias for remote explosion rendering
+  spawnExplosion(pos) { this._spawnExplosion(pos); }
+
   _touchesPlayer(g) {
     if (!this.getContactTargets) return false;
     const targets = this.getContactTargets() || [];
