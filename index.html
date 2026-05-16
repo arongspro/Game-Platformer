@@ -381,57 +381,73 @@
       letter-spacing: 2px;
     }
     @media (max-width: 980px) {
-      /* 한 줄 미니 HUD */
+      /* 한 줄 미니 HUD - 모바일 전체 너비 활용 */
       #combat-navbar {
         top: 4px;
-        left: 6px;
-        right: 6px;
+        left: 4px;
+        right: 4px;
         min-height: 0;
         padding: 3px 8px;
-        gap: 6px;
+        gap: 4px;
         grid-template-columns: 1fr auto 1fr;
         border-radius: 4px;
       }
-      /* 불필요한 요소 숨김 */
-      .nav-brand, #perf-chip, #tier-panel, #my-nick-wrap,
-      #match-panel, .nav-label, #health-label {
+      /* 숨김: 브랜드명, 티어 배지만 숨김 / 나머지 표시 */
+      .nav-brand, #tier-panel, #health-label {
         display: none !important;
       }
+      /* 닉네임: 작게 표시 */
+      #my-nick-wrap {
+        font-size: 8px !important;
+        letter-spacing: 1px;
+        opacity: 0.8;
+      }
+      #my-nick { font-size: 8px; }
       /* 섹션 한 줄 정렬 */
-      .nav-left   { justify-self: start;  gap: 4px; }
-      .nav-center { justify-self: center; gap: 4px; }
-      .nav-right  { justify-self: end;    gap: 4px; }
+      .nav-left   { justify-self: start;  gap: 3px; align-items: center; }
+      .nav-center { justify-self: center; gap: 3px; align-items: center; }
+      .nav-right  { justify-self: end;    gap: 3px; align-items: center; }
       /* 칩 최소화 */
       .nav-chip {
         min-height: 0;
-        padding: 2px 5px;
-        gap: 4px;
+        padding: 2px 4px;
+        gap: 3px;
         border-radius: 3px;
       }
+      .nav-label { font-size: 6px !important; letter-spacing: 1px; opacity: 0.55; }
       /* 플레이어 수 */
       #player-count {
-        font-size: 9px !important;
-        letter-spacing: 1px;
+        font-size: 8px !important;
+        letter-spacing: 0px;
       }
-      /* FPS / Ping */
-      #fps-display { font-size: 9px !important; }
-      #ping-display { font-size: 8px !important; }
+      /* FPS / Ping - 한 줄로 */
+      #perf-chip .nav-stack { flex-direction: row; gap: 3px; align-items: center; }
+      #fps-display { font-size: 8px !important; }
+      #ping-display { font-size: 8px !important; margin: 0 !important; }
       /* 체력바 */
-      #combat-navbar #health-bar { width: 64px; }
-      #combat-navbar #health-track { height: 4px; }
-      #combat-navbar #health-num { font-size: 11px; margin-top: 1px; }
+      #combat-navbar #health-bar {
+        width: 52px;
+        flex-direction: row;
+        align-items: center;
+        gap: 3px;
+      }
+      #combat-navbar #health-track { height: 4px; flex: 1; }
+      #combat-navbar #health-num { font-size: 9px; margin-top: 0; white-space: nowrap; }
       /* 탄약 */
       #combat-navbar #ammo-display {
         min-width: 0;
-        gap: 1px 3px;
+        gap: 0 2px;
+        grid-template-columns: auto auto auto;
+        align-items: baseline;
       }
-      #combat-navbar #ammo-current { font-size: 13px; }
-      #combat-navbar #ammo-max    { font-size: 8px; margin: 0 0 1px; }
-      #combat-navbar #ammo-mode   { font-size: 7px; letter-spacing: 1px; }
+      #combat-navbar #ammo-current { font-size: 11px; }
+      #combat-navbar #ammo-max    { font-size: 7px; margin: 0; }
+      #combat-navbar #ammo-mode   { font-size: 6px; letter-spacing: 0; grid-column: 1 / -1; }
       /* 킬/매치 */
-      #match-kills  { font-size: 10px; letter-spacing: 1px; }
-      #match-goal   { font-size: 8px;  letter-spacing: 1px; opacity: .6; }
-      #match-status { font-size: 7px;  letter-spacing: 1px; opacity: .5; }
+      #match-panel { flex-direction: row; gap: 3px; align-items: baseline; }
+      #match-kills  { font-size: 10px; letter-spacing: 0; }
+      #match-goal   { font-size: 7px;  letter-spacing: 0; opacity: .6; }
+      #match-status { font-size: 6px;  letter-spacing: 0; opacity: .5; }
       /* 무기슬롯 */
       #weapon-slots {
         width: calc(100vw - 24px);
