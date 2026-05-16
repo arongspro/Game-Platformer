@@ -571,11 +571,12 @@ export class Renderer {
     armLMesh.position.y = -0.7; armLMesh.castShadow = true; armLPivot.add(armLMesh);
     group.add(armLPivot);
 
-    // 총 그룹
+    // 총 그룹 - 오른팔 피벗에 부착 (팔 끝 손 위치 기준)
     const gunGroup = new THREE.Group();
-    gunGroup.position.set(0.35, 1.22, 1.2);
+    // 팔 길이(0.6) 끝 + 총 오프셋
+    gunGroup.position.set(0.05, -0.75, -0.35);
     if (this._sharedGunObj) gunGroup.add(this._cloneGunForPlayer());
-    group.add(gunGroup);
+    armRPivot.add(gunGroup);
 
     // 픽셀 텍스처 적용 대상 메시들 (나중에 applyPixels로 업데이트)
     const bodyMeshes = [body, head, legLMesh, legRMesh, armRMesh, armLMesh];
@@ -684,37 +685,66 @@ export class Renderer {
     const pitch    = info.pitch     ?? 0;
     const moveTime = info.move_time ?? 0;
     const bobAmp   = info.bob_amp   ?? 0;
-    const isSliding = !!info.is_sliding;
-    const isAiming  = !!info.is_aiming;
-    const recoil    = info.recoil   ?? 0;
+    const isSliding   = !!info.is_sliding;
+    const isAiming    = !!info.is_aiming;
+    const isReloading = !!info.is_reloading;
+    const reloadProg  = info.reload_progress ?? 0;
+    const recoil      = info.recoil   ?? 0;
 
     const slideOffset = isSliding ? -0.6 : 0;
     group.position.set(px, py + 0.4 + slideOffset, pz);
     group.rotation.y = -THREE.MathUtils.degToRad(yaw) - Math.PI / 2;
 
-    // 머리 pitch (Python: extra_rot = RotX(pitch), pivot_y=-0.25)
+    // 머리 pitch
     headPivot.rotation.x = THREE.MathUtils.degToRad(-pitch);
 
-    // 다리 스윙 (Python: swing = sin(move_time*6)*20deg*bob_amp)
+    // 다리 스윙
     const swing = isSliding ? 0 : Math.sin(moveTime * 6) * (20 * Math.PI/180) * bobAmp;
     legLPivot.rotation.x = isSliding ? (70*Math.PI/180) :  swing;
     legRPivot.rotation.x = isSliding ?-(70*Math.PI/180) : -swing;
 
-    // 팔 (Python draw_asymmetric_arm)
+    // 팔 기본 자세
     const ads = isAiming ? 1 : 0;
-    // 오른팔 (side=1): z_rot=(-20+10*ads), x_rot=(65-15*ads)
-    armRPivot.rotation.x = THREE.MathUtils.degToRad(65 - ads*15);
-    armRPivot.rotation.z = THREE.MathUtils.degToRad(-20 + ads*10);
-    // 왼팔 (side=-1): z_rot=(40-20*ads), x_rot=(45+10*ads)
-    armLPivot.rotation.x = THREE.MathUtils.degToRad(45 + ads*10);
-    armLPivot.rotation.z = THREE.MathUtils.degToRad( 40 - ads*20);
+    // 오른팔 (총 들고 있는 팔)
+    let armRx = THREE.MathUtils.degToRad(65 - ads*15);
+    let armRz = THREE.MathUtils.degToRad(-20 + ads*10);
+    // 왼팔
+    let armLx = THREE.MathUtils.degToRad(45 + ads*10);
+    let armLz = THREE.MathUtils.degToRad( 40 - ads*20);
+
+    // ── 장전 모션 ──
+    if (isReloading) {
+      // 장전 사이클: 0→0.4 팔 내리기, 0.4→0.7 탄창 교체, 0.7→1.0 팔 올리기
+      const p = reloadProg;
+      let reloadOffset = 0;
+      if (p < 0.4) {
+        // 팔 내리기
+        reloadOffset = (p / 0.4) * (50 * Math.PI/180);
+      } else if (p < 0.7) {
+        // 최대 내려간 상태 유지
+        reloadOffset = 50 * Math.PI/180;
+        // 왼팔 앞으로 (탄창 교체)
+        armLx += THREE.MathUtils.degToRad(30 * Math.sin((p - 0.4) / 0.3 * Math.PI));
+        armLz -= THREE.MathUtils.degToRad(20 * Math.sin((p - 0.4) / 0.3 * Math.PI));
+      } else {
+        // 팔 올리기
+        reloadOffset = (1 - (p - 0.7) / 0.3) * (50 * Math.PI/180);
+      }
+      armRx += reloadOffset;
+      armRz += THREE.MathUtils.degToRad(10) * Math.sin(reloadProg * Math.PI);
+    }
+
+    armRPivot.rotation.x = armRx;
+    armRPivot.rotation.z = armRz;
+    armLPivot.rotation.x = armLx;
+    armLPivot.rotation.z = armLz;
 
     // OBJ 로드 완료됐는데 아직 총이 없으면 추가
     if (this._sharedGunObj && gunGroup.children.length === 0) {
       gunGroup.add(this._cloneGunForPlayer());
     }
 
-    // 총 반동
+    // 총 반동 (gunGroup은 armRPivot 자식이므로 로컬 회전)
     gunGroup.rotation.x = recoil * -0.3;
 
     // ── 픽셀 → 부위별 평균색 단색 적용 ──
@@ -1069,7 +1099,8 @@ export class Renderer {
     const s = this._sharedGunScale;
     const c = this._sharedGunCenter;
     g.scale.setScalar(s);
-    g.position.set(-c.x*s, -c.y*s, -c.z*s);
+    // 총구가 앞(+Z)을 향하고 손 위치에 자연스럽게 걸치도록 조정
+    g.position.set(-c.x*s + 0.0, -c.y*s - 0.05, -c.z*s);
     g.rotation.set(0, Math.PI, 0);
     return g;
   }
