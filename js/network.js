@@ -412,8 +412,8 @@ export class Network {
       const now = Date.now();
       const data = snap.val() || {};
       const players = Object.entries(data)
-        .filter(([uid, info]) => uid !== this.myUid && info?.nickname && (now - (info.ts || 0) < 90000))
-        .map(([uid, info]) => ({ uid, nickname: info.nickname }));
+        .filter(([uid, info]) => info?.nickname && (now - (info.ts || 0) < 90000))
+        .map(([uid, info]) => ({ uid, nickname: info.nickname, isSelf: uid === this.myUid }));
       this.onOnlinePlayers?.(players);
     });
   }
