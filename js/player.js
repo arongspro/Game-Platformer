@@ -1171,14 +1171,30 @@ export class Player {
     const pitchRad = THREE.MathUtils.degToRad(camCtrl.pitch);
     this._gunGroup3P.rotation.x = pitchRad - this.recoilOffset * 0.3;
 
-    // Arms — 총 그립 위치에 맞춰 팔 끝이 닿도록
-    // 총이 (0.3, 1.15, -0.55) 중심 회전 → 그립은 총 중심보다 약간 뒤/아래
-    // 팔 pivot: (0.45, 1.4, 0.05), 팔 길이 0.6 → 팔 끝이 그립에 맞도록 각도 계산
-    // 기본 앞 방향 65도 + pitch 연동
-    this._armRPivot.rotation.x = THREE.MathUtils.degToRad(65 - ads*15) + pitchRad;
-    this._armRPivot.rotation.z = THREE.MathUtils.degToRad(-20 + ads*10);
-    this._armLPivot.rotation.x = THREE.MathUtils.degToRad(45 + ads*10) + pitchRad;
-    this._armLPivot.rotation.z = THREE.MathUtils.degToRad( 40 - ads*20);
+    // ── 팔을 총 그립/포어그립에 정확히 붙이기 ──
+    this._gunGroup3P.updateMatrixWorld(true);
+    this.bodyGroup.updateMatrixWorld(true);
+
+    const _gripLocal  = new THREE.Vector3(0, -0.10,  0.10);
+    const _foregrip   = new THREE.Vector3(0, -0.05, -0.15);
+    const gripWorld   = _gripLocal.clone().applyMatrix4(this._gunGroup3P.matrixWorld);
+    const foregripW   = _foregrip.clone().applyMatrix4(this._gunGroup3P.matrixWorld);
+
+    const armRWorld = new THREE.Vector3(0.45, 1.4, 0.05).applyMatrix4(this.bodyGroup.matrixWorld);
+    const armLWorld = new THREE.Vector3(-0.45, 1.4, 0.05).applyMatrix4(this.bodyGroup.matrixWorld);
+
+    const groupMatInv = new THREE.Matrix4().copy(this.bodyGroup.matrixWorld).invert();
+
+    const aimArm = (pivot, gripW, pivotW) => {
+      const gripLocal  = gripW.clone().applyMatrix4(groupMatInv);
+      const pivotLocal = pivotW.clone().applyMatrix4(groupMatInv);
+      const dir = new THREE.Vector3().subVectors(gripLocal, pivotLocal).normalize();
+      pivot.rotation.x = Math.atan2(-dir.z, -dir.y);
+      pivot.rotation.z = Math.atan2( dir.x, -dir.y);
+    };
+
+    aimArm(this._armRPivot, gripWorld,  armRWorld);
+    aimArm(this._armLPivot, foregripW,  armLWorld);
   }
 
   // ─────────────────────────────────────────
