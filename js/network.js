@@ -294,6 +294,7 @@ export class Network {
       recoil:      snapshot.recoil,
       is_aiming:   snapshot.is_aiming,
       weapon_slot:     snapshot.weapon_slot    ?? 1,
+      loadout:         snapshot.loadout        || [],
       is_reloading:    snapshot.is_reloading   ?? false,
       reload_progress: snapshot.reload_progress ?? 0,
       grenades:    snapshot.grenades || [],
