@@ -912,28 +912,7 @@ function loop() {
   }
 
 
-  // ── 모바일 오토에임: FIRE 버튼을 누르고 있을 때만 히트박스 체크 ──
-  // 히트박스 위에 있으면 발사, 없으면 발사 차단 (버튼 안누르면 건드리지 않음)
-  if (isMobile && mobileCtrl && mobileCtrl._active && player.weaponSlot !== 4 && player.weaponSlot !== 3) {
-    if (player.mouse.left) {
-      const _origin = camCtrl.getHeadPos();
-      const _front  = camCtrl.getFront();
-      const _wallD  = wallBlockDist(_origin, _front);
-      let _onTarget = false;
-      for (const [, info] of Object.entries(network.otherPlayers)) {
-        if (!info?.pos) continue;
-        if ((info.mapId || 'spire') !== (renderer.mapId || 'spire')) continue;
-        const _base = new THREE.Vector3(info.pos[0], info.pos[1], info.pos[2]);
-        for (const hb of HITBOXES) {
-          const _center = _base.clone(); _center.y += hb.offsetY;
-          const _t = rayVsCapsule(_origin, _front, _center, hb.halfH, hb.radius);
-          if (_t < _wallD) { _onTarget = true; break; }
-        }
-        if (_onTarget) break;
-      }
-      if (!_onTarget) { player.mouse.left = false; player.mouseLeftHeld = false; }
-    }
-  }
+  // 모바일: FIRE 버튼 누르면 무조건 발사 (오토에임 없음)
 
   player.update(camCtrl, isLocked() ? checkHit : null, dt);
   camCtrl.update(player.pos, player.isSliding, player.bobAmp,
