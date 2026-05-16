@@ -7,6 +7,7 @@ import { Player }           from './player.js';
 import { Network }          from './network.js';
 import { getRatingTier }    from './ranks.js';
 import { WEAPON_CATALOG, getWeaponById, normalizeLoadout } from './weapons.js';
+import { isMobile, MobileControls } from './mobile.js';
 
 // ── Session check (redirect to login.html if not logged in) ──
 const rawUser = sessionStorage.getItem('vp_user');
@@ -111,6 +112,21 @@ setTimeout(() => {
 const remoteMeshes = {};
 const clock = new THREE.Clock();
 
+// ── Mobile Controls ──
+const mobileCtrl = new MobileControls(camCtrl, player);
+if (isMobile) {
+  mobileCtrl.buildUI();
+  // 모바일에서는 lock overlay ENTER 버튼 클릭 시 바로 활성화
+  document.getElementById('lock-btn')?.addEventListener('touchstart', e => {
+    e.preventDefault();
+    mobileCtrl.activate();
+  }, { passive: false });
+  // 오버레이에 모바일 안내 문구 추가
+  const enterBtn = document.getElementById('lock-btn');
+  if (enterBtn) enterBtn.textContent = '[ TAP TO PLAY ]';
+  document.body.classList.add('is-mobile');
+}
+
 // ── Pointer lock ──
 function tryLock() {
   const fn = canvas.requestPointerLock || canvas.mozRequestPointerLock || canvas.webkitRequestPointerLock;
@@ -123,12 +139,14 @@ document.getElementById('room-panel')?.addEventListener('click', e => e.stopProp
 document.getElementById('match-limit-wrap')?.addEventListener('click', e => e.stopPropagation());
 
 function isLocked() {
+  if (isMobile) return mobileCtrl._active;
   return document.pointerLockElement === canvas ||
          document.mozPointerLockElement === canvas ||
          document.webkitPointerLockElement === canvas;
 }
 
 function onPointerLockChange() {
+  if (isMobile) return; // 모바일은 overlay를 mobileCtrl.activate()에서 처리
   // Don't show lock overlay while chat is open
   if (_chatOpen) { lockOverlay.style.display = 'none'; return; }
   lockOverlay.style.display = isLocked() ? 'none' : 'flex';
