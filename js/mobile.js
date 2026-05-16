@@ -17,6 +17,7 @@ export class MobileControls {
     this._look     = { active: false, touchId: null, lastX: 0, lastY: 0 };
     this._active   = false;
     this._aimLocked = false; // 조준 토글 상태
+    this._firePressed = false; // FIRE 버튼 누름 상태 (오토에임과 별도)
   }
 
   setActive(v) { this._active = v; }
@@ -332,8 +333,8 @@ export class MobileControls {
 
     // ── 버튼들 ──
     this._bindHoldBtn(fireBtn,
-      () => { this._mouse.left = true; },
-      () => { this._mouse.left = false; this.player.mouseLeftHeld = false; }
+      () => { this._mouse.left = true;  this._firePressed = true; },
+      () => { this._mouse.left = false; this._firePressed = false; this.player.mouseLeftHeld = false; }
     );
 
     // ── 조준 버튼: 토글 방식 ──
