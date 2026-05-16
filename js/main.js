@@ -959,11 +959,16 @@ function loop() {
                  player.totalAmmo === player.maxTotalAmmo &&
                  player.grenadeCount === player.maxGrenades &&
                  player.bandageCount === player.maxBandage;
+  let nearAnyCrate = false;
   for (const crate of crates) {
     const near = player.pos.distanceTo(crate.pos) <= CRATE_INTERACT_DIST;
     crate.label.visible = near && !isFull;
     crate.group.rotation.y += 0.008;
+    if (near && !isFull) nearAnyCrate = true;
   }
+  // 모바일 RESUPPLY 버튼 표시
+  const mobResupply = document.getElementById('mob-resupply');
+  if (mobResupply) mobResupply.style.display = nearAnyCrate ? 'block' : 'none';
 
   // ── Grenade charge bar / slot UI ──
   if (player.weaponSlot === 4 && player.isChargingGrenade) {
