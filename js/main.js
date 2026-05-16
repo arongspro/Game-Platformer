@@ -912,7 +912,7 @@ function loop() {
   }
 
 
-  // ── 모바일 오토에임: FIRE 버튼 누르거나 OR 십자선이 히트박스에 닿으면 발사 ──
+  // ── 모바일 오토에임: 조준점이 히트박스에 있으면 자동 발사 ──
   if (isMobile && mobileCtrl && mobileCtrl._active && player.weaponSlot !== 4 && player.weaponSlot !== 3) {
     const _origin = camCtrl.getHeadPos();
     const _front  = camCtrl.getFront();
@@ -929,12 +929,11 @@ function loop() {
       }
       if (_onTarget) break;
     }
-    // FIRE 버튼 누름 OR 히트박스에 닿으면 발사
-    // mouse.left가 꺼져 있던 경우에만 mouseLeftHeld 리셋 (SEMI 연속 발사 허용)
-    if (_onTarget) {
-      if (!player.mouse.left) player.mouseLeftHeld = false;
-      player.mouse.left = true;
-    }
+    // 오토에임: 히트박스에 닿으면 발사
+    player.mouse.left = _onTarget;
+    if (!_onTarget) player.mouseLeftHeld = false;
+    // FIRE 버튼 누르면 무조건 발사 (오토에임 덮어쓰기)
+    if (mobileCtrl._firePressed) player.mouse.left = true;
   }
 
   player.update(camCtrl, isLocked() ? checkHit : null, dt);
