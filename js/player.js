@@ -1370,12 +1370,15 @@ export class Player {
       recoil:         this.recoilOffset,
       is_aiming:      this.isAiming,
       weapon_slot:    this.weaponSlot,
+      loadout:        this.loadoutIds || [],
       is_reloading:   this.isReloading || this.sniperReloading || this.pistolReloading ||
+                      this.rpgReloading ||
                       !!(this.weaponStates && Object.values(this.weaponStates).some(s => s.reloading)),
       reload_progress: (() => {
         if (this.isReloading)      return 1 - this.reloadTimer / this.reloadDuration;
         if (this.sniperReloading)  return 1 - this.sniperReloadTimer / this.sniperReloadDur;
         if (this.pistolReloading)  return 1 - this.pistolReloadTimer / this.pistolReloadDur;
+        if (this.rpgReloading)     return 1 - this.rpgReloadTimer / (this.rpgReloadDur || 110);
         const ws = this.weaponStates;
         if (ws) for (const s of Object.values(ws)) {
           if (s.reloading) return 1 - s.reloadTimer / (s.reloadDur || 60);
