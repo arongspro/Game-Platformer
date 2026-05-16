@@ -572,11 +572,10 @@ export class Renderer {
     armLMesh.position.y = -0.7; armLMesh.castShadow = true; armLPivot.add(armLMesh);
     group.add(armLPivot);
 
-    // 총 그룹 - armRPivot 자식 (팔 끝 손 위치, 몸 앞으로 배치)
-    // armRMesh.position.y = -0.6, 손 위치 y=-0.65, 앞 -Z(몸 앞 방향)
+    // 총 그룹 - group 직접 자식, 중심점은 총 중앙, 몸통 완전히 앞에 배치
     const gunGroup = new THREE.Group();
-    gunGroup.position.set(0.0, -0.65, -0.35);
-    armRPivot.add(gunGroup);
+    gunGroup.position.set(0.3, 1.15, -0.55);
+    group.add(gunGroup);
 
     // 무기별 box mesh 맵 (weapon id → mesh group) — OBJ 로드 전 fallback용
     const weaponMeshes = {};
@@ -842,51 +841,55 @@ export class Renderer {
     group.position.set(px, py + 0.4 + slideOffset, pz);
     group.rotation.y = -THREE.MathUtils.degToRad(yaw) - Math.PI / 2;
 
-    // 머리 pitch
-    headPivot.rotation.x = THREE.MathUtils.degToRad(-pitch);
+    // 머리 pitch — +pitch
+    headPivot.rotation.x = THREE.MathUtils.degToRad(pitch);
 
     // 다리 스윙
     const swing = isSliding ? 0 : Math.sin(moveTime * 6) * (20 * Math.PI/180) * bobAmp;
     legLPivot.rotation.x = isSliding ? (70*Math.PI/180) :  swing;
     legRPivot.rotation.x = isSliding ?-(70*Math.PI/180) : -swing;
 
-    // pitch(라디안) — 팔에 반영해 총이 바라보는 방향을 향하도록
-    const pitchRad = THREE.MathUtils.degToRad(-pitch);
-
-    // 팔 기본 자세 (pitch 추가)
+    // 총 pitch — 총 중심점에서 회전 (+pitch)
     const ads = isAiming ? 1 : 0;
-    // 오른팔: 65도(앞) + pitch
-    let armRx = THREE.MathUtils.degToRad(65 - ads*15) + pitchRad;
-    let armRz = THREE.MathUtils.degToRad(-20 + ads*10);
-    // 왼팔: pitch 연동
-    let armLx = THREE.MathUtils.degToRad(45 + ads*10) + pitchRad;
-    let armLz = THREE.MathUtils.degToRad( 40 - ads*20);
+    const pitchRad = THREE.MathUtils.degToRad(pitch);
 
     // ── 장전 모션 ──
     if (isReloading) {
-      // 장전 사이클: 0→0.4 팔 내리기, 0.4→0.7 탄창 교체, 0.7→1.0 팔 올리기
       const p = reloadProg;
       let reloadOffset = 0;
       if (p < 0.4) {
-        // 팔 내리기
         reloadOffset = (p / 0.4) * (50 * Math.PI/180);
       } else if (p < 0.7) {
-        // 최대 내려간 상태 유지
         reloadOffset = 50 * Math.PI/180;
-        // 왼팔 앞으로 (탄창 교체)
+      } else {
+        reloadOffset = (1 - (p - 0.7) / 0.3) * (50 * Math.PI/180);
+      }
+      gunGroup.rotation.x = pitchRad + reloadProg * Math.PI * 0.18 - recoil * 0.3;
+    } else {
+      gunGroup.rotation.x = pitchRad - recoil * 0.3;
+    }
+
+    // 팔 — 총 그립에 맞춰 + pitch 연동
+    let armRx = THREE.MathUtils.degToRad(65 - ads*15) + pitchRad;
+    let armRz = THREE.MathUtils.degToRad(-20 + ads*10);
+    let armLx = THREE.MathUtils.degToRad(45 + ads*10) + pitchRad;
+    let armLz = THREE.MathUtils.degToRad( 40 - ads*20);
+
+    // 장전 시 오른팔 추가 모션
+    if (isReloading) {
+      const p = reloadProg;
+      let reloadOffset = 0;
+      if (p < 0.4) {
+        reloadOffset = (p / 0.4) * (50 * Math.PI/180);
+      } else if (p < 0.7) {
+        reloadOffset = 50 * Math.PI/180;
         armLx += THREE.MathUtils.degToRad(30 * Math.sin((p - 0.4) / 0.3 * Math.PI));
         armLz -= THREE.MathUtils.degToRad(20 * Math.sin((p - 0.4) / 0.3 * Math.PI));
       } else {
-        // 팔 올리기
         reloadOffset = (1 - (p - 0.7) / 0.3) * (50 * Math.PI/180);
       }
       armRx += reloadOffset;
       armRz += THREE.MathUtils.degToRad(10) * Math.sin(reloadProg * Math.PI);
-
-      // 총도 약간 기울어짐 (장전감)
-      gunGroup.rotation.x = reloadProg * Math.PI * 0.18 - recoil * 0.3;
-    } else {
-      gunGroup.rotation.x = recoil * -0.3;
     }
 
     armRPivot.rotation.x = armRx;
@@ -894,7 +897,7 @@ export class Renderer {
     armLPivot.rotation.x = armLx;
     armLPivot.rotation.z = armLz;
 
-    // gunGroup은 armRPivot 자식 — 팔과 함께 움직임, position은 init에서 고정
+    // gunGroup은 group 직접 자식 — 중심점이 총 중앙, pitch는 gunGroup에서 처리
 
     // ── 픽셀 → 부위별 평균색 단색 적용 ──
     const pixels = info.pixels;
