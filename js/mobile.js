@@ -16,6 +16,7 @@ export class MobileControls {
     this._joystick = { active: false, touchId: null, startX: 0, startY: 0, dx: 0, dy: 0 };
     this._look     = { active: false, touchId: null, lastX: 0, lastY: 0 };
     this._active   = false;
+    this._aimLocked = false; // 조준 토글 상태
   }
 
   setActive(v) { this._active = v; }
@@ -293,7 +294,7 @@ export class MobileControls {
     joystickZone.addEventListener('touchend',    endJoystick, { passive: false });
     joystickZone.addEventListener('touchcancel', endJoystick, { passive: false });
 
-    // ── 시점 드래그 ──
+    // ── 시점 드래그 (조준 중에도 허용) ──
     lookZone.addEventListener('touchstart', e => {
       e.preventDefault();
       for (const t of e.changedTouches) {
@@ -314,6 +315,7 @@ export class MobileControls {
         const dy = t.clientY - this._look.lastY;
         this._look.lastX = t.clientX;
         this._look.lastY = t.clientY;
+        // 조준 중이어도 카메라 드래그 허용 (this._mouse.right 상태 전달)
         this.camCtrl.onMouseMove(dx * 3.6, dy * 3.6, this._mouse.right, this.player.scopeProgress);
       }
     }, { passive: false });
@@ -333,10 +335,24 @@ export class MobileControls {
       () => { this._mouse.left = true; },
       () => { this._mouse.left = false; this.player.mouseLeftHeld = false; }
     );
-    this._bindHoldBtn(aimBtn,
-      () => { this._mouse.right = true; },
-      () => { this._mouse.right = false; }
-    );
+
+    // ── 조준 버튼: 토글 방식 ──
+    // 처음 누르면 조준 ON (유지), 다시 누르면 조준 OFF
+    aimBtn.addEventListener('touchstart', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (this._aimLocked) {
+        // 조준 중 → 해제
+        this._aimLocked = false;
+        this._mouse.right = false;
+        aimBtn.classList.remove('pressed');
+      } else {
+        // 조준 시작 → 잠금
+        this._aimLocked = true;
+        this._mouse.right = true;
+        aimBtn.classList.add('pressed');
+      }
+    }, { passive: false });
     this._bindHoldBtn(jumpBtn,
       () => { this._keys['Space'] = true; },
       () => { this._keys['Space'] = false; }
@@ -365,6 +381,12 @@ export class MobileControls {
         e.preventDefault();
         e.stopPropagation();
         const slot = Number(btn.dataset.slot);
+        // 조준 토글 해제
+        if (this._aimLocked) {
+          this._aimLocked = false;
+          this._mouse.right = false;
+          document.getElementById('mob-aim')?.classList.remove('pressed');
+        }
         // 재장전 상태 강제 해제 후 슬롯 전환
         this.player.isReloading      = false;
         this.player.reloadTimer      = 0;
