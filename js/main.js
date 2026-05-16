@@ -610,7 +610,7 @@ player.grenadeSystem.onExplode = (pos, radius, maxDamage, meta = {}) => {
   }
   if (myDist < radius) {
     const falloff = Math.max(0, 1 - (myDist / radius));
-    const selfDmg = Math.round(maxDamage * falloff * falloff * 0.5); // reduced from 0.75
+    const selfDmg = Math.round(maxDamage * falloff * falloff * 0.15); // greatly reduced self damage
     if (selfDmg > 0) {
       player.health = Math.max(0, player.health - selfDmg);
       player.applyKnockback(pos, 2.5 + falloff * 5.5); // stronger knockback for grenade jump
@@ -696,7 +696,7 @@ player.onRocketExplode = (pos, hitPlayer = false) => {
   // 자기 자신 범위 피해 (벽 충돌 시에만, 직격은 이미 hitPlayer=true)
   if (!hitPlayer && myDist < RADIUS) {
     const falloff = Math.max(0, 1 - (myDist / RADIUS));
-    const selfDmg = Math.round(40 * falloff * falloff * 0.6);
+    const selfDmg = Math.round(40 * falloff * falloff * 0.2);
     if (selfDmg > 0) {
       player.health = Math.max(0, player.health - selfDmg);
       player.applyKnockback(pos, 3.0 + falloff * 6.0);
