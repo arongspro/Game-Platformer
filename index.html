@@ -552,10 +552,14 @@
       #loadout-grid { grid-template-columns: 1fr; }
     }
     #overlay-nav {
-      position: absolute;
-      top: 24px;
-      left: 32px;
-      right: 32px;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      padding: 16px 32px;
+      background: rgba(0,0,0,0.5);
+      backdrop-filter: blur(6px);
+      z-index: 101;
       display: flex;
       align-items: center;
       justify-content: space-between;
