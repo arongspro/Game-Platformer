@@ -118,7 +118,7 @@ function tryLock() {
 }
 
 lockBtn.addEventListener('click', e => { e.preventDefault(); tryLock(); });
-lockOverlay.addEventListener('click', e => { e.preventDefault(); tryLock(); });
+// lockOverlay 자체 클릭은 게임 진입 안 함 — 버튼(#lock-btn)만 진입
 document.getElementById('room-panel')?.addEventListener('click', e => e.stopPropagation());
 document.getElementById('match-limit-wrap')?.addEventListener('click', e => e.stopPropagation());
 
@@ -1133,15 +1133,22 @@ function updateOnlinePlayersList(players) {
   for (const p of players) {
     const row = document.createElement('div');
     row.className = 'online-player-row';
-    row.innerHTML = `
-      <span class="online-nick">${escapeHtml(p.nickname)}</span>
-      <button class="duel-challenge-btn" data-uid="${p.uid}" data-nick="${escapeHtml(p.nickname)}" type="button">⚔</button>
-    `;
-    row.querySelector('.duel-challenge-btn').addEventListener('click', () => {
-      if (network.duelState) { addKillfeed('Already in a duel!'); return; }
-      network.sendDuelRequest(p.uid, p.nickname);
-      addKillfeed(`⚔ Challenge sent to ${p.nickname}...`);
-    });
+    if (p.isSelf) {
+      row.innerHTML = `
+        <span class="online-nick">${escapeHtml(p.nickname)}</span>
+        <span class="online-self-tag">YOU</span>
+      `;
+    } else {
+      row.innerHTML = `
+        <span class="online-nick">${escapeHtml(p.nickname)}</span>
+        <button class="duel-challenge-btn" data-uid="${p.uid}" data-nick="${escapeHtml(p.nickname)}" type="button">⚔</button>
+      `;
+      row.querySelector('.duel-challenge-btn').addEventListener('click', () => {
+        if (network.duelState) { addKillfeed('Already in a duel!'); return; }
+        network.sendDuelRequest(p.uid, p.nickname);
+        addKillfeed(`⚔ Challenge sent to ${p.nickname}...`);
+      });
+    }
     list.appendChild(row);
   }
 }
