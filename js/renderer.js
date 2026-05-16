@@ -2,6 +2,7 @@
 
 import * as THREE from 'three';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
+import { WEAPON_CATALOG } from './weapons.js';
 
 export class Renderer {
   constructor(canvas) {
@@ -571,18 +572,136 @@ export class Renderer {
     armLMesh.position.y = -0.7; armLMesh.castShadow = true; armLPivot.add(armLMesh);
     group.add(armLPivot);
 
-    // 총 그룹 - 오른팔 피벗에 부착 (팔 끝 손 위치 기준)
+    // 총 그룹 - headPivot에 부착해 머리 pitch 연동, 오른팔 끝 위치에 맞게 오프셋
+    // headPivot local space: Y=0이 머리 중심(world 1.7), 오른팔 shoulder=0.45,1.4
+    // armRPivot.y=1.4 → headPivot.y=1.7 → 차이=-0.3 → 팔끝(아래0.6) → headPivot 기준 y=-0.3-0.6=-0.9
     const gunGroup = new THREE.Group();
-    // 팔 길이(0.6) 끝 + 총 오프셋
-    gunGroup.position.set(0.05, -0.75, -0.35);
-    if (this._sharedGunObj) gunGroup.add(this._cloneGunForPlayer());
-    armRPivot.add(gunGroup);
+    gunGroup.position.set(0.55, -0.9, 0.0);  // head local: 오른쪽+0.55, 아래-0.9, 앞으로 나중에 pitch에 맞게
+    headPivot.add(gunGroup);
+
+    // 무기별 box mesh 맵 (weapon id → mesh group) — OBJ 로드 전 fallback용
+    const weaponMeshes = {};
+    const std3p = (color) => new THREE.MeshLambertMaterial({ color });
+    const box3p  = (sx, sy, sz) => new THREE.BoxGeometry(sx, sy, sz);
+
+    // m4a1: OBJ 로드되면 대체, 로드 전엔 박스 fallback
+    {
+      const g = new THREE.Group();
+      const body   = new THREE.Mesh(box3p(0.07, 0.10, 0.50), std3p(0x1a1a1a));
+      const barrel = new THREE.Mesh(box3p(0.03, 0.03, 0.20), std3p(0x333333));
+      barrel.position.set(0, 0.01, -0.35);
+      const grip   = new THREE.Mesh(box3p(0.05, 0.13, 0.06), std3p(0x2a1a0a));
+      grip.position.set(0, -0.10, 0.08);
+      g.add(body, barrel, grip);
+      weaponMeshes['m4a1'] = g;
+    }
+    // sniper
+    {
+      const g = new THREE.Group();
+      const body   = new THREE.Mesh(box3p(0.06, 0.08, 0.60), std3p(0x1a1a1a));
+      const barrel = new THREE.Mesh(box3p(0.025, 0.025, 0.30), std3p(0x333333));
+      barrel.position.set(0, 0.01, -0.45);
+      g.add(body, barrel);
+      weaponMeshes['sniper'] = g;
+    }
+    // pistol
+    {
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(box3p(0.05, 0.10, 0.18), std3p(0x2a2a2a));
+      const barrel = new THREE.Mesh(box3p(0.03, 0.03, 0.10), std3p(0x333333));
+      barrel.position.set(0, 0.02, -0.14);
+      g.add(body, barrel);
+      weaponMeshes['pistol'] = g;
+    }
+    // smg
+    {
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(box3p(0.065, 0.08, 0.32), std3p(0x222222));
+      const barrel = new THREE.Mesh(box3p(0.025, 0.025, 0.12), std3p(0x444444));
+      barrel.position.set(0, 0.01, -0.22);
+      g.add(body, barrel);
+      weaponMeshes['smg'] = g;
+    }
+    // shotgun
+    {
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(box3p(0.07, 0.09, 0.50), std3p(0x3a2a1a));
+      const barrel = new THREE.Mesh(box3p(0.055, 0.055, 0.30), std3p(0x222222));
+      barrel.position.set(0, 0.025, -0.40);
+      g.add(body, barrel);
+      weaponMeshes['shotgun'] = g;
+    }
+    // lmg
+    {
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(box3p(0.07, 0.09, 0.55), std3p(0x1a1a1a));
+      const barrel = new THREE.Mesh(box3p(0.03, 0.03, 0.38), std3p(0x333333));
+      barrel.position.set(0, 0.015, -0.46);
+      g.add(body, barrel);
+      weaponMeshes['lmg'] = g;
+    }
+    // dmr
+    {
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(box3p(0.055, 0.08, 0.48), std3p(0x1a1a2a));
+      const barrel = new THREE.Mesh(box3p(0.025, 0.025, 0.22), std3p(0x333355));
+      barrel.position.set(0, 0.01, -0.35);
+      g.add(body, barrel);
+      weaponMeshes['dmr'] = g;
+    }
+    // burst
+    {
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(box3p(0.058, 0.07, 0.38), std3p(0x0a1a2a));
+      const barrel = new THREE.Mesh(box3p(0.025, 0.025, 0.15), std3p(0x0055aa));
+      barrel.position.set(0, 0.01, -0.26);
+      g.add(body, barrel);
+      weaponMeshes['burst'] = g;
+    }
+    // rail
+    {
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(box3p(0.05, 0.065, 0.58), std3p(0x111122));
+      const barrel = new THREE.Mesh(box3p(0.025, 0.025, 0.32), std3p(0x2233aa));
+      barrel.position.set(0, 0.01, -0.45);
+      g.add(body, barrel);
+      weaponMeshes['rail'] = g;
+    }
+    // carbine
+    {
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(box3p(0.055, 0.075, 0.42), std3p(0x2a2a2a));
+      const barrel = new THREE.Mesh(box3p(0.025, 0.025, 0.18), std3p(0x444444));
+      barrel.position.set(0, 0.01, -0.30);
+      g.add(body, barrel);
+      weaponMeshes['carbine'] = g;
+    }
+    // rpg
+    {
+      const g = new THREE.Group();
+      const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.75, 8), std3p(0x4a3a28));
+      tube.rotation.x = Math.PI / 2;
+      tube.position.set(0, 0, -0.20);
+      const nose = new THREE.Mesh(new THREE.ConeGeometry(0.044, 0.24, 8), std3p(0x333333));
+      nose.rotation.x = Math.PI / 2;
+      nose.position.set(0, 0, -0.66);
+      g.add(tube, nose);
+      weaponMeshes['rpg'] = g;
+    }
+
+    // 현재 표시 중인 무기 id 추적
+    gunGroup.add(weaponMeshes['m4a1']);  // 기본값
+    let _currentWeaponId = 'm4a1';
+
+    // OBJ 로드 완료 시 m4a1 mesh 교체 (cloneGunForPlayer 대신)
+    // → updateRemotePlayers에서 처리
 
     // 픽셀 텍스처 적용 대상 메시들 (나중에 applyPixels로 업데이트)
     const bodyMeshes = [body, head, legLMesh, legRMesh, armRMesh, armLMesh];
 
     return { group, headPivot, legLPivot, legRPivot, armLPivot, armRPivot,
-             gunGroup, nameplate: null, bodyMeshes, _lastPixelKey: null };
+             gunGroup, weaponMeshes, _currentWeaponId,
+             nameplate: null, bodyMeshes, _lastPixelKey: null };
   }
 
   // ── 픽셀 영역 평균색 계산 ──
@@ -676,7 +795,7 @@ export class Renderer {
     }
 
     const parts = playerMeshMap[pid];
-    const { group, headPivot, legLPivot, legRPivot, armLPivot, armRPivot, gunGroup } = parts;
+    const { group, headPivot, legLPivot, legRPivot, armLPivot, armRPivot, gunGroup, weaponMeshes } = parts;
 
     const px = info.pos?.[0] ?? 0;
     const py = info.pos?.[1] ?? 0;
@@ -691,11 +810,52 @@ export class Renderer {
     const reloadProg  = info.reload_progress ?? 0;
     const recoil      = info.recoil   ?? 0;
 
+    // ── 현재 장착 무기 ID 계산 (weapon_slot + loadout) ──
+    const weaponSlot  = info.weapon_slot ?? 1;
+    const loadout     = info.loadout || [];
+    let activeWeaponId = 'm4a1';
+    if (weaponSlot >= 1 && weaponSlot <= 3) {
+      activeWeaponId = loadout[weaponSlot - 1] || 'm4a1';
+    } else if (weaponSlot === 5) {
+      // slot5 = 세 번째 무기 (pistol 슬롯)
+      activeWeaponId = loadout[2] || 'pistol';
+    }
+    // slot 4 = 수류탄, 3 = 붕대 → 무기 숨김 처리
+
+    // ── 무기 mesh 교체 ──
+    if (parts._currentWeaponId !== activeWeaponId) {
+      // OBJ m4a1이 로드됐으면 weaponMeshes['m4a1']을 OBJ clone으로 교체
+      if (activeWeaponId === 'm4a1' && this._sharedGunObj) {
+        const oldM4 = weaponMeshes['m4a1'];
+        gunGroup.remove(oldM4);
+        const newM4 = this._cloneGunForPlayer();
+        weaponMeshes['m4a1_obj'] = newM4;
+        gunGroup.add(newM4);
+      } else {
+        // 기존 mesh 제거 후 새 mesh 추가
+        while (gunGroup.children.length > 0) gunGroup.remove(gunGroup.children[0]);
+        const mesh = weaponMeshes[activeWeaponId] || weaponMeshes['m4a1'];
+        if (mesh) gunGroup.add(mesh);
+      }
+      parts._currentWeaponId = activeWeaponId;
+    } else if (activeWeaponId === 'm4a1' && this._sharedGunObj &&
+               !weaponMeshes['m4a1_obj'] && gunGroup.children.length > 0 &&
+               !(gunGroup.children[0].isGroup && gunGroup.children[0].children.length > 3)) {
+      // OBJ 로드 완료됐는데 아직 box fallback인 경우 교체
+      while (gunGroup.children.length > 0) gunGroup.remove(gunGroup.children[0]);
+      const objClone = this._cloneGunForPlayer();
+      weaponMeshes['m4a1_obj'] = objClone;
+      gunGroup.add(objClone);
+    }
+
+    // slot 4(수류탄), 3(붕대) 일 때 총 숨김
+    gunGroup.visible = (weaponSlot !== 4 && weaponSlot !== 3);
+
     const slideOffset = isSliding ? -0.6 : 0;
     group.position.set(px, py + 0.4 + slideOffset, pz);
     group.rotation.y = -THREE.MathUtils.degToRad(yaw) - Math.PI / 2;
 
-    // 머리 pitch
+    // 머리 pitch (gunGroup이 headPivot 자식이므로 pitch 자동 연동)
     headPivot.rotation.x = THREE.MathUtils.degToRad(-pitch);
 
     // 다리 스윙
@@ -732,6 +892,11 @@ export class Renderer {
       }
       armRx += reloadOffset;
       armRz += THREE.MathUtils.degToRad(10) * Math.sin(reloadProg * Math.PI);
+
+      // 총도 약간 기울어짐 (장전감)
+      gunGroup.rotation.x = reloadProg * Math.PI * 0.18 - recoil * 0.3;
+    } else {
+      gunGroup.rotation.x = recoil * -0.3;
     }
 
     armRPivot.rotation.x = armRx;
@@ -739,13 +904,19 @@ export class Renderer {
     armLPivot.rotation.x = armLx;
     armLPivot.rotation.z = armLz;
 
-    // OBJ 로드 완료됐는데 아직 총이 없으면 추가
-    if (this._sharedGunObj && gunGroup.children.length === 0) {
-      gunGroup.add(this._cloneGunForPlayer());
-    }
-
-    // 총 반동 (gunGroup은 armRPivot 자식이므로 로컬 회전)
-    gunGroup.rotation.x = recoil * -0.3;
+    // gunGroup은 headPivot 자식: pitch 자동 연동됨
+    // 팔 끝(shoulder+arm_len)에 맞게 headPivot local position 보정
+    // headPivot.y = 1.7 (world), armR shoulder = (0.45, 1.4, 0.05)
+    // armR 끝 = shoulder + rotate(arm, armRx, armRz) ≈ (0.45+sin(armRz)*0.6, 1.4-cos(armRx)*0.6, 0.05)
+    // headPivot local: x=armR_world_x, y=armR_world_y-1.7, z=armR_world_z
+    const armEndX =  0.45 + Math.sin(-armRz) * 0.6;
+    const armEndY =  1.40 - Math.cos( armRx) * 0.6;
+    const armEndZ =  0.05 + Math.sin( armRx) * 0.6;
+    gunGroup.position.set(
+      armEndX,            // headPivot local x (group rotation.y 고려 안함 — parent group이 yaw 회전)
+      armEndY - 1.7,      // headPivot local y (headPivot은 y=1.7에 있음)
+      armEndZ
+    );
 
     // ── 픽셀 → 부위별 평균색 단색 적용 ──
     const pixels = info.pixels;
@@ -1099,8 +1270,10 @@ export class Renderer {
     const s = this._sharedGunScale;
     const c = this._sharedGunCenter;
     g.scale.setScalar(s);
-    // 총구가 앞(+Z)을 향하고 손 위치에 자연스럽게 걸치도록 조정
-    g.position.set(-c.x*s + 0.0, -c.y*s - 0.05, -c.z*s);
+    // gunGroup은 이제 headPivot 자식, position은 외부에서 팔 끝으로 설정됨
+    // OBJ: barrel runs +Z → Y=PI 회전으로 총구가 -Z(앞)을 향하게
+    // center.x 보정으로 좌우 중앙 맞춤
+    g.position.set(-c.x * s, -c.y * s, -c.z * s);
     g.rotation.set(0, Math.PI, 0);
     return g;
   }
