@@ -869,33 +869,60 @@ export class Renderer {
       gunGroup.rotation.x = pitchRad - recoil * 0.3;
     }
 
-    // 팔 — 총 그립에 맞춰 + pitch 연동
-    let armRx = THREE.MathUtils.degToRad(65 - ads*15) + pitchRad;
-    let armRz = THREE.MathUtils.degToRad(-20 + ads*10);
-    let armLx = THREE.MathUtils.degToRad(45 + ads*10) + pitchRad;
-    let armLz = THREE.MathUtils.degToRad( 40 - ads*20);
+    // ── 팔을 총 그립/포어그립에 정확히 붙이기 ──
+    // gunGroup 로컬 기준 그립 위치: (0, -0.10, 0.10) — 오른손 그립
+    // gunGroup 로컬 기준 포어그립:  (0, -0.05, -0.15) — 왼손 포어그립
+    const _gripLocal    = new THREE.Vector3(0,  -0.10,  0.10);
+    const _foregrip     = new THREE.Vector3(0,  -0.05, -0.15);
 
-    // 장전 시 오른팔 추가 모션
+    // gunGroup 월드 행렬 업데이트 후 그립 월드 좌표 계산
+    gunGroup.updateMatrixWorld(true);
+    const gripWorld     = _gripLocal.clone().applyMatrix4(gunGroup.matrixWorld);
+    const foregrip      = _foregrip.clone().applyMatrix4(gunGroup.matrixWorld);
+
+    // 오른팔: pivot 월드 좌표 → 그립까지 방향 벡터 → rotation 역산
+    // armRPivot 위치는 group 로컬 (0.45, 1.4, 0.05)
+    group.updateMatrixWorld(true);
+    const armRWorld = new THREE.Vector3(0.45, 1.4, 0.05).applyMatrix4(group.matrixWorld);
+    const armLWorld = new THREE.Vector3(-0.45, 1.4, 0.05).applyMatrix4(group.matrixWorld);
+
+    // 팔 길이
+    const ARM_R_LEN = 0.6;
+    const ARM_L_LEN = 0.7;
+
+    // pivot → 그립 방향으로 팔을 회전시키는 헬퍼
+    // armPivot은 group의 자식 → group 로컬 공간에서 계산
+    const aimArm = (pivot, gripW, pivotW, armLen) => {
+      // group 로컬 공간으로 변환
+      const groupMatInv = new THREE.Matrix4().copy(group.matrixWorld).invert();
+      const gripLocal  = gripW.clone().applyMatrix4(groupMatInv);
+      const pivotLocal = pivotW.clone().applyMatrix4(groupMatInv);
+
+      // pivot → grip 방향 벡터
+      const dir = new THREE.Vector3().subVectors(gripLocal, pivotLocal).normalize();
+
+      // 팔의 기본 방향은 pivot 로컬 -Y (아래)
+      // Three.js: rotation.x = 앞으로 기울이는 각도
+      // dir을 pivot 로컬로 변환해서 각도 추출
+      // pivot.rotation.y는 건드리지 않음 (z축 회전으로 옆 방향 처리)
+      const rx = Math.atan2(-dir.z, -dir.y); // 앞뒤 기울기
+      const rz = Math.atan2( dir.x, -dir.y); // 옆 기울기
+
+      pivot.rotation.x = rx;
+      pivot.rotation.z = rz;
+    };
+
+    aimArm(armRPivot, gripWorld,    armRWorld, ARM_R_LEN);
+    aimArm(armLPivot, foregrip,     armLWorld, ARM_L_LEN);
+
+    // 장전 시 왼팔만 추가 모션
     if (isReloading) {
       const p = reloadProg;
-      let reloadOffset = 0;
-      if (p < 0.4) {
-        reloadOffset = (p / 0.4) * (50 * Math.PI/180);
-      } else if (p < 0.7) {
-        reloadOffset = 50 * Math.PI/180;
-        armLx += THREE.MathUtils.degToRad(30 * Math.sin((p - 0.4) / 0.3 * Math.PI));
-        armLz -= THREE.MathUtils.degToRad(20 * Math.sin((p - 0.4) / 0.3 * Math.PI));
-      } else {
-        reloadOffset = (1 - (p - 0.7) / 0.3) * (50 * Math.PI/180);
+      if (p >= 0.4 && p < 0.7) {
+        armLPivot.rotation.x += THREE.MathUtils.degToRad(30 * Math.sin((p - 0.4) / 0.3 * Math.PI));
+        armLPivot.rotation.z -= THREE.MathUtils.degToRad(20 * Math.sin((p - 0.4) / 0.3 * Math.PI));
       }
-      armRx += reloadOffset;
-      armRz += THREE.MathUtils.degToRad(10) * Math.sin(reloadProg * Math.PI);
     }
-
-    armRPivot.rotation.x = armRx;
-    armRPivot.rotation.z = armRz;
-    armLPivot.rotation.x = armLx;
-    armLPivot.rotation.z = armLz;
 
     // gunGroup은 group 직접 자식 — 중심점이 총 중앙, pitch는 gunGroup에서 처리
 
