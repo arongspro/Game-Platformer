@@ -572,12 +572,11 @@ export class Renderer {
     armLMesh.position.y = -0.7; armLMesh.castShadow = true; armLPivot.add(armLMesh);
     group.add(armLPivot);
 
-    // 총 그룹 - headPivot에 부착해 머리 pitch 연동, 오른팔 끝 위치에 맞게 오프셋
-    // headPivot local space: Y=0이 머리 중심(world 1.7), 오른팔 shoulder=0.45,1.4
-    // armRPivot.y=1.4 → headPivot.y=1.7 → 차이=-0.3 → 팔끝(아래0.6) → headPivot 기준 y=-0.3-0.6=-0.9
+    // 총 그룹 - armRPivot 자식 (팔 끝 손 위치)
+    // armRMesh.position.y = -0.6, 손 위치 y=-0.65, 앞 -Z
     const gunGroup = new THREE.Group();
-    gunGroup.position.set(0.55, -0.9, 0.0);  // head local: 오른쪽+0.55, 아래-0.9, 앞으로 나중에 pitch에 맞게
-    headPivot.add(gunGroup);
+    gunGroup.position.set(0.0, -0.65, -0.10);
+    armRPivot.add(gunGroup);
 
     // 무기별 box mesh 맵 (weapon id → mesh group) — OBJ 로드 전 fallback용
     const weaponMeshes = {};
@@ -689,18 +688,15 @@ export class Renderer {
       weaponMeshes['rpg'] = g;
     }
 
-    // 현재 표시 중인 무기 id 추적
-    gunGroup.add(weaponMeshes['m4a1']);  // 기본값
-    let _currentWeaponId = 'm4a1';
+    // 기본 무기 mesh (m4a1 box fallback) 추가
+    gunGroup.add(weaponMeshes['m4a1']);
 
-    // OBJ 로드 완료 시 m4a1 mesh 교체 (cloneGunForPlayer 대신)
-    // → updateRemotePlayers에서 처리
-
-    // 픽셀 텍스처 적용 대상 메시들 (나중에 applyPixels로 업데이트)
+    // 픽셀 텍스처 적용 대상 메시들
     const bodyMeshes = [body, head, legLMesh, legRMesh, armRMesh, armLMesh];
 
     return { group, headPivot, legLPivot, legRPivot, armLPivot, armRPivot,
-             gunGroup, weaponMeshes, _currentWeaponId,
+             gunGroup, weaponMeshes,
+             _currentWeaponId: 'm4a1', _m4aObjLoaded: false,
              nameplate: null, bodyMeshes, _lastPixelKey: null };
   }
 
@@ -811,41 +807,32 @@ export class Renderer {
     const recoil      = info.recoil   ?? 0;
 
     // ── 현재 장착 무기 ID 계산 (weapon_slot + loadout) ──
-    const weaponSlot  = info.weapon_slot ?? 1;
-    const loadout     = info.loadout || [];
-    let activeWeaponId = 'm4a1';
-    if (weaponSlot >= 1 && weaponSlot <= 3) {
-      activeWeaponId = loadout[weaponSlot - 1] || 'm4a1';
-    } else if (weaponSlot === 5) {
-      // slot5 = 세 번째 무기 (pistol 슬롯)
-      activeWeaponId = loadout[2] || 'pistol';
-    }
-    // slot 4 = 수류탄, 3 = 붕대 → 무기 숨김 처리
+    const weaponSlot = info.weapon_slot ?? 1;
+    const loadout    = info.loadout || [];
+    // slot 1,2,5 → loadout[0],[1],[2]. slot3(붕대), slot4(수류탄) → 숨김
+    let activeWeaponId = loadout[0] || 'm4a1';
+    if      (weaponSlot === 1) activeWeaponId = loadout[0] || 'm4a1';
+    else if (weaponSlot === 2) activeWeaponId = loadout[1] || 'm4a1';
+    else if (weaponSlot === 5) activeWeaponId = loadout[2] || 'pistol';
 
-    // ── 무기 mesh 교체 ──
+    // ── 무기 mesh 교체 (무기가 바뀌거나 OBJ 로드 완료 시) ──
+    // m4a1 OBJ 로드 완료 시 박스 fallback을 대체
+    if (activeWeaponId === 'm4a1' && this._sharedGunObj && !parts._m4aObjLoaded) {
+      while (gunGroup.children.length > 0) gunGroup.remove(gunGroup.children[0]);
+      gunGroup.add(this._cloneGunForPlayer());
+      parts._m4aObjLoaded = true;
+      parts._currentWeaponId = null; // 강제 재설정
+    }
+
     if (parts._currentWeaponId !== activeWeaponId) {
-      // OBJ m4a1이 로드됐으면 weaponMeshes['m4a1']을 OBJ clone으로 교체
+      while (gunGroup.children.length > 0) gunGroup.remove(gunGroup.children[0]);
       if (activeWeaponId === 'm4a1' && this._sharedGunObj) {
-        const oldM4 = weaponMeshes['m4a1'];
-        gunGroup.remove(oldM4);
-        const newM4 = this._cloneGunForPlayer();
-        weaponMeshes['m4a1_obj'] = newM4;
-        gunGroup.add(newM4);
+        gunGroup.add(this._cloneGunForPlayer());
       } else {
-        // 기존 mesh 제거 후 새 mesh 추가
-        while (gunGroup.children.length > 0) gunGroup.remove(gunGroup.children[0]);
         const mesh = weaponMeshes[activeWeaponId] || weaponMeshes['m4a1'];
         if (mesh) gunGroup.add(mesh);
       }
       parts._currentWeaponId = activeWeaponId;
-    } else if (activeWeaponId === 'm4a1' && this._sharedGunObj &&
-               !weaponMeshes['m4a1_obj'] && gunGroup.children.length > 0 &&
-               !(gunGroup.children[0].isGroup && gunGroup.children[0].children.length > 3)) {
-      // OBJ 로드 완료됐는데 아직 box fallback인 경우 교체
-      while (gunGroup.children.length > 0) gunGroup.remove(gunGroup.children[0]);
-      const objClone = this._cloneGunForPlayer();
-      weaponMeshes['m4a1_obj'] = objClone;
-      gunGroup.add(objClone);
     }
 
     // slot 4(수류탄), 3(붕대) 일 때 총 숨김
@@ -855,7 +842,7 @@ export class Renderer {
     group.position.set(px, py + 0.4 + slideOffset, pz);
     group.rotation.y = -THREE.MathUtils.degToRad(yaw) - Math.PI / 2;
 
-    // 머리 pitch (gunGroup이 headPivot 자식이므로 pitch 자동 연동)
+    // 머리 pitch
     headPivot.rotation.x = THREE.MathUtils.degToRad(-pitch);
 
     // 다리 스윙
@@ -863,13 +850,16 @@ export class Renderer {
     legLPivot.rotation.x = isSliding ? (70*Math.PI/180) :  swing;
     legRPivot.rotation.x = isSliding ?-(70*Math.PI/180) : -swing;
 
-    // 팔 기본 자세
+    // pitch(라디안) — 팔에 반영해 총이 바라보는 방향을 향하도록
+    const pitchRad = THREE.MathUtils.degToRad(-pitch);
+
+    // 팔 기본 자세 (pitch 추가)
     const ads = isAiming ? 1 : 0;
-    // 오른팔 (총 들고 있는 팔)
-    let armRx = THREE.MathUtils.degToRad(65 - ads*15);
+    // 오른팔: 65도(앞) + pitch
+    let armRx = THREE.MathUtils.degToRad(65 - ads*15) + pitchRad;
     let armRz = THREE.MathUtils.degToRad(-20 + ads*10);
-    // 왼팔
-    let armLx = THREE.MathUtils.degToRad(45 + ads*10);
+    // 왼팔: pitch 연동
+    let armLx = THREE.MathUtils.degToRad(45 + ads*10) + pitchRad;
     let armLz = THREE.MathUtils.degToRad( 40 - ads*20);
 
     // ── 장전 모션 ──
@@ -904,19 +894,7 @@ export class Renderer {
     armLPivot.rotation.x = armLx;
     armLPivot.rotation.z = armLz;
 
-    // gunGroup은 headPivot 자식: pitch 자동 연동됨
-    // 팔 끝(shoulder+arm_len)에 맞게 headPivot local position 보정
-    // headPivot.y = 1.7 (world), armR shoulder = (0.45, 1.4, 0.05)
-    // armR 끝 = shoulder + rotate(arm, armRx, armRz) ≈ (0.45+sin(armRz)*0.6, 1.4-cos(armRx)*0.6, 0.05)
-    // headPivot local: x=armR_world_x, y=armR_world_y-1.7, z=armR_world_z
-    const armEndX =  0.45 + Math.sin(-armRz) * 0.6;
-    const armEndY =  1.40 - Math.cos( armRx) * 0.6;
-    const armEndZ =  0.05 + Math.sin( armRx) * 0.6;
-    gunGroup.position.set(
-      armEndX,            // headPivot local x (group rotation.y 고려 안함 — parent group이 yaw 회전)
-      armEndY - 1.7,      // headPivot local y (headPivot은 y=1.7에 있음)
-      armEndZ
-    );
+    // gunGroup은 armRPivot 자식 — 팔과 함께 움직임, position은 init에서 고정
 
     // ── 픽셀 → 부위별 평균색 단색 적용 ──
     const pixels = info.pixels;
