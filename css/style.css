@@ -277,7 +277,10 @@ body::before {
   justify-content: center;
   z-index: 100;
   backdrop-filter: blur(8px);
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 80px 16px 32px;
+  box-sizing: border-box;
 }
 #lock-overlay::before {
   content: '';
@@ -609,11 +612,16 @@ body.headshot-kick #canvas {
     letter-spacing: clamp(2px, 1.5vw, 4px);
   }
   #lock-overlay {
-    padding: 16px;
+    justify-content: flex-start;
+    padding: 70px 16px 40px;
   }
 }
 
-@media (max-height: 600px) {
+@media (max-height: 700px) {
+  #lock-overlay {
+    justify-content: flex-start;
+    padding-top: 60px;
+  }
   #lock-overlay h1 { font-size: clamp(16px, 4vh, 36px); margin-bottom: 8px; }
   #lock-overlay p { margin-bottom: 16px; }
   #lock-overlay button { padding: 8px 24px; }
