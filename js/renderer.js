@@ -572,10 +572,10 @@ export class Renderer {
     armLMesh.position.y = -0.7; armLMesh.castShadow = true; armLPivot.add(armLMesh);
     group.add(armLPivot);
 
-    // 총 그룹 - armRPivot 자식 (팔 끝 손 위치)
-    // armRMesh.position.y = -0.6, 손 위치 y=-0.65, 앞 -Z
+    // 총 그룹 - armRPivot 자식 (팔 끝 손 위치, 몸 앞으로 배치)
+    // armRMesh.position.y = -0.6, 손 위치 y=-0.65, 앞 -Z(몸 앞 방향)
     const gunGroup = new THREE.Group();
-    gunGroup.position.set(0.0, -0.65, -0.10);
+    gunGroup.position.set(0.0, -0.65, -0.35);
     armRPivot.add(gunGroup);
 
     // 무기별 box mesh 맵 (weapon id → mesh group) — OBJ 로드 전 fallback용
