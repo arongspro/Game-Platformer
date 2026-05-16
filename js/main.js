@@ -930,7 +930,11 @@ function loop() {
       if (_onTarget) break;
     }
     // FIRE 버튼 누름 OR 히트박스에 닿으면 발사
-    if (_onTarget) player.mouse.left = true;
+    // mouse.left가 꺼져 있던 경우에만 mouseLeftHeld 리셋 (SEMI 연속 발사 허용)
+    if (_onTarget) {
+      if (!player.mouse.left) player.mouseLeftHeld = false;
+      player.mouse.left = true;
+    }
   }
 
   player.update(camCtrl, isLocked() ? checkHit : null, dt);
