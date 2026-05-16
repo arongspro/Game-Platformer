@@ -541,10 +541,11 @@ export class Player {
     armL.position.y = -0.7; armL.castShadow = true; this._armLPivot.add(armL);
     this.bodyGroup.add(this._armLPivot);
 
-    // Gun group — armRPivot 자식 (팔 끝 손 위치, 몸 앞으로 배치)
+    // Gun group — bodyGroup 직접 자식, 중심점은 총 중앙
+    // 총 위치: 오른쪽 앞, 몸통 완전히 밖 (z=-0.55: 몸 앞, x=0.3: 오른쪽)
     this._gunGroup3P = new THREE.Group();
-    this._gunGroup3P.position.set(0.0, -0.65, -0.35);
-    this._armRPivot.add(this._gunGroup3P);
+    this._gunGroup3P.position.set(0.3, 1.15, -0.55);
+    this.bodyGroup.add(this._gunGroup3P);
 
     // List of meshes to apply pixel texture
     this._bodyMeshes = [body, head, legL, legR, armR, armL];
@@ -1157,24 +1158,27 @@ export class Player {
     this.bodyGroup.position.set(this.pos.x, this.pos.y + 0.4 + slideOffset, this.pos.z);
     this.bodyGroup.rotation.y = -THREE.MathUtils.degToRad(camCtrl.yaw) - Math.PI / 2;
 
-    // Head pitch
-    this._headPivot.rotation.x = THREE.MathUtils.degToRad(-camCtrl.pitch);
+    // Head pitch — +pitch
+    this._headPivot.rotation.x = THREE.MathUtils.degToRad(camCtrl.pitch);
 
     // Leg swing
     const swing = this.isSliding ? 0 : Math.sin(this.moveTime * 6) * (20 * Math.PI/180) * this.bobAmp;
     this._legLPivot.rotation.x = this.isSliding ?  (70*Math.PI/180) :  swing;
     this._legRPivot.rotation.x = this.isSliding ? -(70*Math.PI/180) : -swing;
 
-    // Arms — pitch 연동으로 총이 바라보는 방향을 향하도록
+    // Gun pitch — 총 중심점에서 회전 (+pitch)
     const ads = this.adsProgress;
-    const pitchRad = THREE.MathUtils.degToRad(-camCtrl.pitch);
+    const pitchRad = THREE.MathUtils.degToRad(camCtrl.pitch);
+    this._gunGroup3P.rotation.x = pitchRad - this.recoilOffset * 0.3;
+
+    // Arms — 총 그립 위치에 맞춰 팔 끝이 닿도록
+    // 총이 (0.3, 1.15, -0.55) 중심 회전 → 그립은 총 중심보다 약간 뒤/아래
+    // 팔 pivot: (0.45, 1.4, 0.05), 팔 길이 0.6 → 팔 끝이 그립에 맞도록 각도 계산
+    // 기본 앞 방향 65도 + pitch 연동
     this._armRPivot.rotation.x = THREE.MathUtils.degToRad(65 - ads*15) + pitchRad;
     this._armRPivot.rotation.z = THREE.MathUtils.degToRad(-20 + ads*10);
     this._armLPivot.rotation.x = THREE.MathUtils.degToRad(45 + ads*10) + pitchRad;
     this._armLPivot.rotation.z = THREE.MathUtils.degToRad( 40 - ads*20);
-
-    // Gun recoil
-    this._gunGroup3P.rotation.x = -this.recoilOffset * 0.3;
   }
 
   // ─────────────────────────────────────────
