@@ -73,6 +73,16 @@ export class MobileControls {
         </div>
       </div>
 
+
+      <!-- 보급품 버튼 (가까울 때만 표시) -->
+      <button id="mob-resupply" style="display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+        font-family:'Orbitron',monospace;font-size:12px;letter-spacing:3px;color:#ffdd00;
+        background:rgba(0,0,0,0.7);border:2px solid rgba(255,220,0,0.8);padding:12px 24px;
+        border-radius:8px;pointer-events:auto;z-index:10;
+        box-shadow:0 0 20px rgba(255,220,0,0.4);touch-action:manipulation;">
+        📦 RESUPPLY
+      </button>
+
       <!-- 무기 슬롯 (하단 중앙) -->
       <div id="mob-weapon-bar">
         <button class="mob-slot" data-slot="1" id="mob-slot-1">1</button>
@@ -147,9 +157,9 @@ export class MobileControls {
         display: flex; flex-direction: column; align-items: center; justify-content: center;
         gap: 2px;
         font-family: 'Orbitron', monospace;
-        font-size: 18px; line-height: 1;
+        font-size: 14px; line-height: 1;
         border-radius: 50%;
-        width: 56px; height: 56px;
+        width: 42px; height: 42px;
         border: 2px solid rgba(0,255,224,0.35);
         background: rgba(0,0,0,0.45);
         color: #00ffe0;
@@ -159,18 +169,18 @@ export class MobileControls {
         pointer-events: auto;
         box-shadow: 0 0 10px rgba(0,255,224,0.15);
       }
-      .mob-btn span { font-size: 7px; letter-spacing: 1px; opacity: 0.65; font-family: 'Share Tech Mono', monospace; }
+      .mob-btn span { font-size: 6px; letter-spacing: 1px; opacity: 0.65; font-family: 'Share Tech Mono', monospace; }
       .mob-btn:active, .mob-btn.pressed { background: rgba(0,255,224,0.22); box-shadow: 0 0 18px rgba(0,255,224,0.4); }
       .mob-fire {
-        width: 72px; height: 72px;
+        width: 56px; height: 56px;
         border-color: rgba(255,80,80,0.6);
         color: #ff5050;
-        font-size: 22px;
+        font-size: 18px;
         box-shadow: 0 0 14px rgba(255,80,80,0.2);
       }
       .mob-fire.pressed { background: rgba(255,80,80,0.25); box-shadow: 0 0 22px rgba(255,80,80,0.5); }
       .mob-aim {
-        width: 60px; height: 60px;
+        width: 48px; height: 48px;
         border-color: rgba(255,204,0,0.5);
         color: #ffcc00;
       }
@@ -305,7 +315,7 @@ export class MobileControls {
         const dy = t.clientY - this._look.lastY;
         this._look.lastX = t.clientX;
         this._look.lastY = t.clientY;
-        this.camCtrl.onMouseMove(dx * 1.8, dy * 1.8, this._mouse.right, this.player.scopeProgress);
+        this.camCtrl.onMouseMove(dx * 3.6, dy * 3.6, this._mouse.right, this.player.scopeProgress);
       }
     }, { passive: false });
 
@@ -335,6 +345,15 @@ export class MobileControls {
       e.preventDefault();
       this.player.startReload();
     }, { passive: false });
+
+    // ── 보급품 버튼 ──
+    const resupplyBtn = document.getElementById('mob-resupply');
+    if (resupplyBtn) {
+      resupplyBtn.addEventListener('touchstart', e => {
+        e.preventDefault();
+        window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyE', bubbles: true }));
+      }, { passive: false });
+    }
 
     // ── 무기 슬롯 ──
     document.querySelectorAll('.mob-slot').forEach(btn => {
