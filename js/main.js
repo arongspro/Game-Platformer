@@ -912,48 +912,8 @@ function loop() {
   }
 
 
-  // ── 모바일 오토에임: 조준점이 히트박스에 있으면 자동 발사 ──
-  if (isMobile && mobileCtrl && mobileCtrl._active && player.weaponSlot !== 4 && player.weaponSlot !== 3) {
-    const _origin = camCtrl.getHeadPos();
-    const _front  = camCtrl.getFront();
-    const _wallD  = wallBlockDist(_origin, _front);
-    let _onTarget = false;
-    for (const [, info] of Object.entries(network.otherPlayers)) {
-      if (!info?.pos) continue;
-      if ((info.mapId || 'spire') !== (renderer.mapId || 'spire')) continue;
-      const _base = new THREE.Vector3(info.pos[0], info.pos[1], info.pos[2]);
-      for (const hb of HITBOXES) {
-        const _center = _base.clone(); _center.y += hb.offsetY;
-        const _t = rayVsCapsule(_origin, _front, _center, hb.halfH, hb.radius);
-        if (_t < _wallD) { _onTarget = true; break; }
-      }
-      if (_onTarget) break;
-    }
-    player.mouse.left = _onTarget;
-    if (!_onTarget) player.mouseLeftHeld = false;
-  }
-
-  // 물리/입력은 포인터락 여부와 무관하게 항상 실행 (죽어도 멈추지 않음)
-  // ── 모바일 오토에임: 조준점이 히트박스에 있으면 자동 발사 ──
-  if (isMobile && mobileCtrl && mobileCtrl._active && player.weaponSlot !== 4 && player.weaponSlot !== 3) {
-    const _origin = camCtrl.getHeadPos();
-    const _front  = camCtrl.getFront();
-    const _wallD  = wallBlockDist(_origin, _front);
-    let _onTarget = false;
-    for (const [, info] of Object.entries(network.otherPlayers)) {
-      if (!info?.pos) continue;
-      if ((info.mapId || 'spire') !== (renderer.mapId || 'spire')) continue;
-      const _base = new THREE.Vector3(info.pos[0], info.pos[1], info.pos[2]);
-      for (const hb of HITBOXES) {
-        const _center = _base.clone(); _center.y += hb.offsetY;
-        const _t = rayVsCapsule(_origin, _front, _center, hb.halfH, hb.radius);
-        if (_t < _wallD) { _onTarget = true; break; }
-      }
-      if (_onTarget) break;
-    }
-    player.mouse.left = _onTarget;
-    if (!_onTarget) player.mouseLeftHeld = false;
-  }
+  // ── 모바일: FIRE 버튼을 누르고 있을 때만 히트박스 체크 후 발사 허용 ──
+  // (오토에임 제거 - FIRE 버튼 입력을 히트박스 여부로 덮어쓰지 않음)
 
   player.update(camCtrl, isLocked() ? checkHit : null, dt);
   camCtrl.update(player.pos, player.isSliding, player.bobAmp,
