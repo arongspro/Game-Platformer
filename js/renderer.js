@@ -1,5 +1,5 @@
 // renderer.js - Three.js 씬, 조명, 맵, 원격 플레이어 풀바디
-// ── v2: 고성능 PBR 쉐이더 + 고품질 프로시저럴 텍스처 ──
+// ── v3: 최적화 + 향상된 그림자 + 볼류메트릭 안개 ──
 
 import * as THREE from 'three';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
@@ -15,8 +15,6 @@ const BOX_VERT = /* glsl */`
   varying vec3 vNormal;
   varying vec2 vUv;
   varying vec3 vViewPos;
-  varying vec4 vShadowCoord;
-
   void main() {
     vec4 worldPos = modelMatrix * vec4(position, 1.0);
     vWorldPos = worldPos.xyz;
@@ -28,7 +26,7 @@ const BOX_VERT = /* glsl */`
   }
 `;
 
-// PBR 박스 프래그먼트 쉐이더 (빛, 그림자, 반사, AO)
+// PBR 박스 프래그먼트 쉐이더 (빛, 그림자, 반사, AO, 안개)
 const BOX_FRAG = /* glsl */`
   precision highp float;
 
@@ -45,6 +43,8 @@ const BOX_FRAG = /* glsl */`
   uniform float uFillIntensity;
   uniform vec3  uAmbientColor;
   uniform float uAmbientIntensity;
+  uniform vec3  uFogColor;
+  uniform float uFogDensity;
 
   varying vec3 vWorldPos;
   varying vec3 vNormal;
@@ -254,6 +254,12 @@ const BOX_FRAG = /* glsl */`
     // ── 톤 매핑 (Reinhard 변형) - ACES는 렌더러가 이미 처리 ──
     finalColor = finalColor / (finalColor + 0.5);
 
+    // ── 지수 안개 (FogExp2 와 동일 공식) ──
+    float dist    = length(vViewPos);
+    float fogFactor = exp(-uFogDensity * uFogDensity * dist * dist);
+    fogFactor = clamp(fogFactor, 0.0, 1.0);
+    finalColor = mix(uFogColor, finalColor, fogFactor);
+
     gl_FragColor = vec4(finalColor, 1.0);
   }
 `;
@@ -272,14 +278,15 @@ export class Renderer {
     this.renderer.shadowMap.type     = THREE.PCFSoftShadowMap;
     this.renderer.outputColorSpace   = THREE.SRGBColorSpace;
     this.renderer.toneMapping        = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.1;
+    this.renderer.toneMappingExposure = 1.15;
     this.renderer.setClearColor(0x6699cc);
     // 물리 기반 조명 활성화
     this.renderer.physicallyCorrectLights = true;
 
     // ── 메인 씬 ──
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.Fog(0x6699cc, 80, 300);
+    // 지수 안개 (선형 안개보다 자연스러운 대기 효과)
+    this.scene.fog = new THREE.FogExp2(0x6699cc, 0.008);
     this.scene.background = new THREE.Color(0x6699cc);
 
     // ── 카메라 ──
@@ -419,6 +426,8 @@ export class Renderer {
       uFillIntensity:  { value: 0.5 },
       uAmbientColor:   { value: new THREE.Vector3(0.55, 0.60, 0.70) },
       uAmbientIntensity: { value: 0.9 },
+      uFogColor:       { value: new THREE.Vector3(0.48, 0.68, 0.83) },   // spire 기본값
+      uFogDensity:     { value: 0.006 },
     };
   }
 
@@ -448,13 +457,15 @@ export class Renderer {
     this.sunLight.position.set(-20, 60, -20);
     this.sunLight.castShadow = true;
     const sh = this.sunLight.shadow;
-    sh.mapSize.set(4096, 4096);  // 고해상도 그림자맵
-    sh.camera.near = 1; sh.camera.far = 300;
-    sh.camera.left = -120; sh.camera.right  = 120;
-    sh.camera.top  =  120; sh.camera.bottom = -120;
-    sh.bias = -0.0002;
-    sh.normalBias = 0.02;        // 피터팬 현상 방지
-    sh.radius = 3;               // 소프트 그림자 반경
+    // ── 고품질 그림자맵 (카스케이드 없이 단일 고해상도) ──
+    sh.mapSize.set(4096, 4096);
+    sh.camera.near = 0.5;
+    sh.camera.far  = 500;
+    sh.camera.left   = -150; sh.camera.right  = 150;
+    sh.camera.top    =  150; sh.camera.bottom = -150;
+    sh.bias       = -0.0003;   // Peter-pan 현상 최소화
+    sh.normalBias = 0.03;      // 표면 접선 바이어스
+    sh.radius     = 4;         // PCF 소프트 그림자 반경 (4=부드럽게)
     this.scene.add(this.sunLight);
 
     // 보조광 (하늘빛 반사)
@@ -802,8 +813,20 @@ export class Renderer {
     const map = this._mapData(mapId);
     this.mapId = mapId;
     localStorage.setItem('vp_map_id', mapId);
-    this.scene.background = new THREE.Color(map.background);
-    this.scene.fog.color.set(map.background);
+
+    // ── 맵별 지수 안개 설정 (FogExp2: 거리에 따라 지수적으로 짙어짐) ──
+    const fogSettings = {
+      spire:   { color: 0x7aaed4, density: 0.006 },   // 밝은 하늘색 안개
+      circuit: { color: 0x080f1c, density: 0.010 },   // 어두운 사이버펑크 안개
+      crater:  { color: 0x6e4a28, density: 0.009 },   // 먼지/열기 황토 안개
+      duel:    { color: 0x080810, density: 0.014 },   // 짙은 어둠 안개
+    };
+    const fogCfg = fogSettings[mapId] || fogSettings.spire;
+    this.scene.fog = new THREE.FogExp2(fogCfg.color, fogCfg.density);
+    this.scene.fog.color.set(fogCfg.color);
+    // 배경색을 안개색과 맞춰 하늘-안개 경계 자연스럽게
+    this.scene.background = new THREE.Color(fogCfg.color);
+    this.renderer.setClearColor(fogCfg.color);
 
     // 맵별 환경광/태양 색상 조정
     const mapEnv = {
@@ -821,6 +844,11 @@ export class Renderer {
       ambColor: new THREE.Vector3(...env.amb),
       fillColor:new THREE.Vector3(...env.fill),
     };
+
+    // 안개 색상을 Vector3로 변환
+    const fogColorHex = fogCfg.color;
+    const fogColorThree = new THREE.Color(fogColorHex);
+    const fogVec = new THREE.Vector3(fogColorThree.r, fogColorThree.g, fogColorThree.b);
 
     // 머티리얼 캐시 (동일 hex+패턴은 재사용)
     const matCache = new Map();
@@ -841,6 +869,8 @@ export class Renderer {
         uniforms.uSunColor.value.copy(sharedUniforms.sunColor);
         uniforms.uAmbientColor.value.copy(sharedUniforms.ambColor);
         uniforms.uFillColor.value.copy(sharedUniforms.fillColor);
+        uniforms.uFogColor.value.copy(fogVec);
+        uniforms.uFogDensity.value = fogCfg.density;
 
         mat = new THREE.ShaderMaterial({
           vertexShader:   BOX_VERT,
@@ -852,7 +882,10 @@ export class Renderer {
 
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(x, y, z);
-      mesh.castShadow    = true;
+      // ── 그림자 최적화: 크고 평평한 지면은 receiveShadow만, 나머지는 cast+receive ──
+      const isFloor = sy <= 0.6 && sx >= 10;   // 얇고 넓은 플랫폼 = 지면
+      const isGiant = sx >= 80 || sz >= 80;    // 거대 지면 베이스
+      mesh.castShadow    = !isGiant;           // 거대 지면은 shadow cast 불필요
       mesh.receiveShadow = true;
       this.scene.add(mesh);
       this.worldGroups.push(mesh);
@@ -889,6 +922,24 @@ export class Renderer {
         mat.uniforms.uTime.value = t;
       }
     }
+  }
+
+  // ── 그림자 카메라를 플레이어 위치에 맞춰 동적 업데이트 ──
+  // 호출: main.js loop() 내에서 renderer.updateShadowCamera(player.pos) 로 사용 가능
+  updateShadowCamera(playerPos) {
+    if (!this.sunLight || !playerPos) return;
+    // 태양빛 방향 유지하며 중심을 플레이어 XZ에 맞춤
+    const target = this.sunLight.target;
+    target.position.set(playerPos.x, 0, playerPos.z);
+    target.updateMatrixWorld();
+    // 그림자 카메라도 같이 이동
+    const offset = new THREE.Vector3(-20, 60, -20).normalize().multiplyScalar(80);
+    this.sunLight.position.set(
+      playerPos.x + offset.x,
+      offset.y,
+      playerPos.z + offset.z
+    );
+    this.sunLight.updateMatrixWorld();
   }
 
   _buildBoosters() {
