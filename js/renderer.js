@@ -579,111 +579,298 @@ export class Renderer {
 
     // 무기별 box mesh 맵 (weapon id → mesh group) — OBJ 로드 전 fallback용
     const weaponMeshes = {};
-    const std3p = (color) => new THREE.MeshLambertMaterial({ color });
-    const box3p  = (sx, sy, sz) => new THREE.BoxGeometry(sx, sy, sz);
 
-    // m4a1: OBJ 로드되면 대체, 로드 전엔 박스 fallback
+    // ── 고품질 재질 헬퍼 ──
+    const metal  = (color, rough=0.35, metal=0.9) => new THREE.MeshStandardMaterial({ color, roughness:rough, metalness:metal });
+    const rubber = (color) => new THREE.MeshStandardMaterial({ color, roughness:0.85, metalness:0.05 });
+    const wood   = (color) => new THREE.MeshStandardMaterial({ color, roughness:0.9,  metalness:0.0  });
+    const box3p  = (sx, sy, sz) => new THREE.BoxGeometry(sx, sy, sz);
+    const cyl    = (rt, rb, h, s=12) => new THREE.CylinderGeometry(rt, rb, h, s);
+
+    // ── 총구 위치 태그 helper (이펙트 스폰에 사용) ──
+    const tagMuzzle = (group, z) => {
+      const dummy = new THREE.Object3D();
+      dummy.name = 'muzzleTag';
+      dummy.position.set(0, 0, z);
+      group.add(dummy);
+    };
+
+    // m4a1: OBJ 로드되면 대체, 로드 전엔 고품질 박스 fallback
     {
       const g = new THREE.Group();
-      const body   = new THREE.Mesh(box3p(0.07, 0.10, 0.50), std3p(0x1a1a1a));
-      const barrel = new THREE.Mesh(box3p(0.03, 0.03, 0.20), std3p(0x333333));
-      barrel.position.set(0, 0.01, -0.35);
-      const grip   = new THREE.Mesh(box3p(0.05, 0.13, 0.06), std3p(0x2a1a0a));
-      grip.position.set(0, -0.10, 0.08);
-      g.add(body, barrel, grip);
+      // 리시버 (upper)
+      const recv = new THREE.Mesh(box3p(0.068,0.055,0.42), metal(0x1c1c1c));
+      recv.position.set(0, 0.018, -0.04);
+      // 핸드가드
+      const hg = new THREE.Mesh(box3p(0.072,0.065,0.22), metal(0x2a2a2a, 0.5));
+      hg.position.set(0, 0.012, -0.22);
+      // 피카티니 레일 탑
+      const rail = new THREE.Mesh(box3p(0.016,0.010,0.30), metal(0x3a3a3a));
+      rail.position.set(0, 0.052, -0.10);
+      // 총열
+      const barrelMesh = new THREE.Mesh(cyl(0.014,0.014,0.36), metal(0x282828, 0.3, 1.0));
+      barrelMesh.rotation.x = Math.PI/2; barrelMesh.position.set(0, 0.015, -0.31);
+      // 소염기 (3-prong flash hider)
+      const fh = new THREE.Mesh(cyl(0.018,0.014,0.05,6), metal(0x111111,0.2,1));
+      fh.rotation.x = Math.PI/2; fh.position.set(0,0.015,-0.52);
+      // 그립
+      const grip = new THREE.Mesh(box3p(0.048,0.13,0.058), rubber(0x1a1208));
+      grip.position.set(0,-0.075,0.055); grip.rotation.x = 0.18;
+      // 탄창
+      const mag = new THREE.Mesh(box3p(0.038,0.12,0.055), metal(0x222222));
+      mag.position.set(0,-0.075,-0.05); mag.rotation.x = -0.12;
+      // 개머리판
+      const stock = new THREE.Mesh(box3p(0.055,0.058,0.22), metal(0x1a1a1a));
+      stock.position.set(0,0.008,0.20);
+      const stockEnd = new THREE.Mesh(box3p(0.062,0.068,0.03), rubber(0x111111));
+      stockEnd.position.set(0,0.008,0.32);
+      g.add(recv,hg,rail,barrelMesh,fh,grip,mag,stock,stockEnd);
+      tagMuzzle(g, -0.545);
       weaponMeshes['m4a1'] = g;
     }
-    // sniper
+
+    // sniper (bolt-action style)
     {
       const g = new THREE.Group();
-      const body   = new THREE.Mesh(box3p(0.06, 0.08, 0.60), std3p(0x1a1a1a));
-      const barrel = new THREE.Mesh(box3p(0.025, 0.025, 0.30), std3p(0x333333));
-      barrel.position.set(0, 0.01, -0.45);
-      g.add(body, barrel);
+      const recv = new THREE.Mesh(box3p(0.060,0.062,0.52), metal(0x181818));
+      recv.position.set(0,0.016,-0.06);
+      // 스코프 베이스
+      const scopeBase = new THREE.Mesh(box3p(0.038,0.018,0.20), metal(0x2a2a2a));
+      scopeBase.position.set(0,0.055,-0.04);
+      // 스코프 튜브
+      const scopeTube = new THREE.Mesh(cyl(0.022,0.022,0.26), metal(0x1a1a1a,0.25,1));
+      scopeTube.rotation.x=Math.PI/2; scopeTube.position.set(0,0.072,-0.04);
+      // 스코프 렌즈
+      const lens = new THREE.Mesh(new THREE.CircleGeometry(0.021,16), new THREE.MeshStandardMaterial({color:0x2244aa,roughness:0.1,metalness:0.2,transparent:true,opacity:0.7}));
+      lens.rotation.y=Math.PI/2; lens.position.set(0,0.072,-0.175);
+      // 총열 (긴)
+      const barrelMesh = new THREE.Mesh(cyl(0.012,0.012,0.48), metal(0x222222,0.2,1));
+      barrelMesh.rotation.x=Math.PI/2; barrelMesh.position.set(0,0.010,-0.42);
+      // 총구 억제기 (suppressor look)
+      const supp = new THREE.Mesh(cyl(0.020,0.020,0.09,8), metal(0x151515,0.3,1));
+      supp.rotation.x=Math.PI/2; supp.position.set(0,0.010,-0.695);
+      // 그립
+      const grip = new THREE.Mesh(box3p(0.046,0.12,0.055), wood(0x4a2e10));
+      grip.position.set(0,-0.065,0.06); grip.rotation.x=0.22;
+      // 개머리판 (wood)
+      const stock = new THREE.Mesh(box3p(0.056,0.065,0.28), wood(0x3e2610));
+      stock.position.set(0,0.005,0.235);
+      g.add(recv,scopeBase,scopeTube,lens,barrelMesh,supp,grip,stock);
+      tagMuzzle(g, -0.745);
       weaponMeshes['sniper'] = g;
     }
-    // pistol
+
+    // pistol (GLOCK style)
     {
       const g = new THREE.Group();
-      const body = new THREE.Mesh(box3p(0.05, 0.10, 0.18), std3p(0x2a2a2a));
-      const barrel = new THREE.Mesh(box3p(0.03, 0.03, 0.10), std3p(0x333333));
-      barrel.position.set(0, 0.02, -0.14);
-      g.add(body, barrel);
+      const slide = new THREE.Mesh(box3p(0.050,0.072,0.175), metal(0x1a1a1a,0.3,0.9));
+      slide.position.set(0,0.025,-0.02);
+      // 슬라이드 세레이션 홈
+      for(let i=0;i<4;i++){
+        const s=new THREE.Mesh(box3p(0.052,0.012,0.006),metal(0x111111,0.6));
+        s.position.set(0,0.038,0.04+i*0.014); g.add(s);
+      }
+      const frame = new THREE.Mesh(box3p(0.046,0.095,0.155), rubber(0x222222));
+      frame.position.set(0,-0.028,0.00);
+      const barrelMesh = new THREE.Mesh(cyl(0.012,0.012,0.12), metal(0x333333,0.2,1));
+      barrelMesh.rotation.x=Math.PI/2; barrelMesh.position.set(0,0.022,-0.10);
+      // 방아쇠 가드
+      const tg = new THREE.Mesh(box3p(0.042,0.010,0.08), rubber(0x222222));
+      tg.position.set(0,-0.047,-0.04);
+      const mag = new THREE.Mesh(box3p(0.040,0.09,0.042), metal(0x1a1a1a));
+      mag.position.set(0,-0.060,0.015);
+      g.add(slide,frame,barrelMesh,tg,mag);
+      tagMuzzle(g, -0.165);
       weaponMeshes['pistol'] = g;
     }
-    // smg
+
+    // smg (Vector/P90 style)
     {
       const g = new THREE.Group();
-      const body = new THREE.Mesh(box3p(0.065, 0.08, 0.32), std3p(0x222222));
-      const barrel = new THREE.Mesh(box3p(0.025, 0.025, 0.12), std3p(0x444444));
-      barrel.position.set(0, 0.01, -0.22);
-      g.add(body, barrel);
+      const body = new THREE.Mesh(box3p(0.068,0.075,0.32), metal(0x1e1e1e,0.4,0.8));
+      body.position.set(0,0.010,0.00);
+      // 탑 마운트 레일
+      const topRail = new THREE.Mesh(box3p(0.020,0.010,0.25), metal(0x2a2a2a));
+      topRail.position.set(0,0.053,-0.02);
+      const barrelMesh = new THREE.Mesh(cyl(0.011,0.011,0.14), metal(0x303030,0.25,1));
+      barrelMesh.rotation.x=Math.PI/2; barrelMesh.position.set(0,0.008,-0.23);
+      // 소염기
+      const flash = new THREE.Mesh(cyl(0.015,0.011,0.03,6), metal(0x111111));
+      flash.rotation.x=Math.PI/2; flash.position.set(0,0.008,-0.315);
+      const grip = new THREE.Mesh(box3p(0.052,0.11,0.052), rubber(0x151515));
+      grip.position.set(0,-0.065,0.06); grip.rotation.x=0.15;
+      const mag = new THREE.Mesh(box3p(0.040,0.002,0.24), metal(0x222222));
+      mag.position.set(0,0.050,-0.02); // 탑-마운트 매거진 (P90 스타일)
+      g.add(body,topRail,barrelMesh,flash,grip,mag);
+      tagMuzzle(g, -0.335);
       weaponMeshes['smg'] = g;
     }
-    // shotgun
+
+    // shotgun (pump-action)
     {
       const g = new THREE.Group();
-      const body = new THREE.Mesh(box3p(0.07, 0.09, 0.50), std3p(0x3a2a1a));
-      const barrel = new THREE.Mesh(box3p(0.055, 0.055, 0.30), std3p(0x222222));
-      barrel.position.set(0, 0.025, -0.40);
-      g.add(body, barrel);
+      const recv = new THREE.Mesh(box3p(0.072,0.072,0.44), metal(0x1a1a1a,0.45));
+      recv.position.set(0,0.010,-0.04);
+      // 더블 배럴 (산탄총 특징)
+      const b1 = new THREE.Mesh(cyl(0.018,0.018,0.40), metal(0x222222,0.3,1));
+      b1.rotation.x=Math.PI/2; b1.position.set(0.010,0.008,-0.32);
+      const b2 = new THREE.Mesh(cyl(0.018,0.018,0.40), metal(0x222222,0.3,1));
+      b2.rotation.x=Math.PI/2; b2.position.set(-0.010,0.008,-0.32);
+      // 펌프 핸드가드
+      const pump = new THREE.Mesh(box3p(0.076,0.060,0.14), wood(0x5a3520));
+      pump.position.set(0,0.002,-0.28);
+      // 그립/개머리판 (wood)
+      const stock = new THREE.Mesh(box3p(0.060,0.080,0.25), wood(0x4a2e14));
+      stock.position.set(0,0.005,0.21);
+      const grip = new THREE.Mesh(box3p(0.052,0.105,0.055), wood(0x4a2e14));
+      grip.position.set(0,-0.058,0.055); grip.rotation.x=0.20;
+      g.add(recv,b1,b2,pump,stock,grip);
+      tagMuzzle(g, -0.525);
       weaponMeshes['shotgun'] = g;
     }
-    // lmg
+
+    // lmg (M249 style)
     {
       const g = new THREE.Group();
-      const body = new THREE.Mesh(box3p(0.07, 0.09, 0.55), std3p(0x1a1a1a));
-      const barrel = new THREE.Mesh(box3p(0.03, 0.03, 0.38), std3p(0x333333));
-      barrel.position.set(0, 0.015, -0.46);
-      g.add(body, barrel);
+      const recv = new THREE.Mesh(box3p(0.075,0.080,0.52), metal(0x181818,0.5));
+      recv.position.set(0,0.012,-0.05);
+      // 히트실드 핸드가드
+      const hg = new THREE.Mesh(box3p(0.080,0.065,0.24), metal(0x242424,0.6));
+      hg.position.set(0,0.006,-0.26);
+      const barrelMesh = new THREE.Mesh(cyl(0.016,0.016,0.44), metal(0x1e1e1e,0.25,1));
+      barrelMesh.rotation.x=Math.PI/2; barrelMesh.position.set(0,0.010,-0.40);
+      // 바이포드 (두 다리)
+      const bpL = new THREE.Mesh(cyl(0.006,0.006,0.14,6), metal(0x222222));
+      bpL.position.set(0.03,-0.04,-0.30); bpL.rotation.z=0.3;
+      const bpR = new THREE.Mesh(cyl(0.006,0.006,0.14,6), metal(0x222222));
+      bpR.position.set(-0.03,-0.04,-0.30); bpR.rotation.z=-0.3;
+      // 탄약통 (drum box)
+      const ammoBox = new THREE.Mesh(box3p(0.065,0.090,0.12), metal(0x2e2e2e,0.7));
+      ammoBox.position.set(0,-0.065,-0.04);
+      const grip = new THREE.Mesh(box3p(0.050,0.11,0.050), rubber(0x151515));
+      grip.position.set(0,-0.065,0.075); grip.rotation.x=0.15;
+      const stock = new THREE.Mesh(box3p(0.058,0.065,0.20), metal(0x1a1a1a));
+      stock.position.set(0,0.010,0.215);
+      g.add(recv,hg,barrelMesh,bpL,bpR,ammoBox,grip,stock);
+      tagMuzzle(g, -0.625);
       weaponMeshes['lmg'] = g;
     }
-    // dmr
+
+    // dmr (VANTAGE — DMR style)
     {
       const g = new THREE.Group();
-      const body = new THREE.Mesh(box3p(0.055, 0.08, 0.48), std3p(0x1a1a2a));
-      const barrel = new THREE.Mesh(box3p(0.025, 0.025, 0.22), std3p(0x333355));
-      barrel.position.set(0, 0.01, -0.35);
-      g.add(body, barrel);
+      const recv = new THREE.Mesh(box3p(0.058,0.065,0.46), metal(0x14141e,0.35,0.9));
+      recv.position.set(0,0.015,-0.05);
+      // 스코프
+      const sTube = new THREE.Mesh(cyl(0.020,0.020,0.22), metal(0x1a1a2a,0.25,1));
+      sTube.rotation.x=Math.PI/2; sTube.position.set(0,0.064,-0.02);
+      const sLens = new THREE.Mesh(new THREE.CircleGeometry(0.019,16), new THREE.MeshStandardMaterial({color:0x3355cc,roughness:0.1,transparent:true,opacity:0.75}));
+      sLens.rotation.y=Math.PI/2; sLens.position.set(0,0.064,-0.135);
+      // 총열
+      const barrelMesh = new THREE.Mesh(cyl(0.013,0.013,0.32), metal(0x222233,0.2,1));
+      barrelMesh.rotation.x=Math.PI/2; barrelMesh.position.set(0,0.012,-0.36);
+      const muzzle = new THREE.Mesh(cyl(0.019,0.013,0.06,8), metal(0x111122,0.2,1));
+      muzzle.rotation.x=Math.PI/2; muzzle.position.set(0,0.012,-0.55);
+      const grip = new THREE.Mesh(box3p(0.046,0.115,0.052), rubber(0x151520));
+      grip.position.set(0,-0.065,0.055); grip.rotation.x=0.20;
+      const stock = new THREE.Mesh(box3p(0.052,0.055,0.22), metal(0x14141e));
+      stock.position.set(0,0.008,0.20);
+      g.add(recv,sTube,sLens,barrelMesh,muzzle,grip,stock);
+      tagMuzzle(g, -0.585);
       weaponMeshes['dmr'] = g;
     }
-    // burst
+
+    // burst (PULSE — futuristic burst rifle)
     {
       const g = new THREE.Group();
-      const body = new THREE.Mesh(box3p(0.058, 0.07, 0.38), std3p(0x0a1a2a));
-      const barrel = new THREE.Mesh(box3p(0.025, 0.025, 0.15), std3p(0x0055aa));
-      barrel.position.set(0, 0.01, -0.26);
-      g.add(body, barrel);
+      const body = new THREE.Mesh(box3p(0.062,0.070,0.40), metal(0x0a1628,0.3,0.85));
+      body.position.set(0,0.010,-0.01);
+      // 에너지 채널 (발광 느낌)
+      const channel = new THREE.Mesh(box3p(0.014,0.008,0.30), new THREE.MeshStandardMaterial({color:0x0088ff,emissive:0x002244,roughness:0.4}));
+      channel.position.set(0,0.036,-0.05);
+      const barrelMesh = new THREE.Mesh(cyl(0.014,0.014,0.20), metal(0x0055aa,0.2,1));
+      barrelMesh.rotation.x=Math.PI/2; barrelMesh.position.set(0,0.010,-0.26);
+      const muzzle = new THREE.Mesh(cyl(0.020,0.014,0.04,8), new THREE.MeshStandardMaterial({color:0x0066cc,emissive:0x001133}));
+      muzzle.rotation.x=Math.PI/2; muzzle.position.set(0,0.010,-0.37);
+      const grip = new THREE.Mesh(box3p(0.048,0.105,0.050), rubber(0x080e1a));
+      grip.position.set(0,-0.062,0.055); grip.rotation.x=0.18;
+      const mag = new THREE.Mesh(box3p(0.038,0.10,0.048), metal(0x0a1a30));
+      mag.position.set(0,-0.062,-0.035); mag.rotation.x=-0.10;
+      g.add(body,channel,barrelMesh,muzzle,grip,mag);
+      tagMuzzle(g, -0.395);
       weaponMeshes['burst'] = g;
     }
-    // rail
+
+    // rail (RAIL GUN — sci-fi)
     {
       const g = new THREE.Group();
-      const body = new THREE.Mesh(box3p(0.05, 0.065, 0.58), std3p(0x111122));
-      const barrel = new THREE.Mesh(box3p(0.025, 0.025, 0.32), std3p(0x2233aa));
-      barrel.position.set(0, 0.01, -0.45);
-      g.add(body, barrel);
+      const body = new THREE.Mesh(box3p(0.055,0.065,0.56), metal(0x0a0a1a,0.2,0.95));
+      body.position.set(0,0.010,-0.06);
+      // 레일 가이드 (양옆)
+      const rL = new THREE.Mesh(box3p(0.008,0.040,0.50), metal(0x2233bb,0.15,1));
+      rL.position.set(0.030,0.010,-0.06);
+      const rR = new THREE.Mesh(box3p(0.008,0.040,0.50), metal(0x2233bb,0.15,1));
+      rR.position.set(-0.030,0.010,-0.06);
+      // 전하 코일 (여러 링)
+      for(let i=0;i<5;i++){
+        const coil = new THREE.Mesh(cyl(0.030,0.030,0.018,8), new THREE.MeshStandardMaterial({color:0x3355cc,emissive:0x112266,roughness:0.2,metalness:0.9}));
+        coil.rotation.x=Math.PI/2; coil.position.set(0,0.010,-0.05-i*0.09);
+        g.add(coil);
+      }
+      const barrelMesh = new THREE.Mesh(cyl(0.012,0.012,0.40), metal(0x1a22aa,0.15,1));
+      barrelMesh.rotation.x=Math.PI/2; barrelMesh.position.set(0,0.010,-0.40);
+      const grip = new THREE.Mesh(box3p(0.046,0.105,0.050), rubber(0x080812));
+      grip.position.set(0,-0.060,0.060); grip.rotation.x=0.18;
+      g.add(body,rL,rR,barrelMesh,grip);
+      tagMuzzle(g, -0.62);
       weaponMeshes['rail'] = g;
     }
+
     // carbine
     {
       const g = new THREE.Group();
-      const body = new THREE.Mesh(box3p(0.055, 0.075, 0.42), std3p(0x2a2a2a));
-      const barrel = new THREE.Mesh(box3p(0.025, 0.025, 0.18), std3p(0x444444));
-      barrel.position.set(0, 0.01, -0.30);
-      g.add(body, barrel);
+      const recv = new THREE.Mesh(box3p(0.062,0.060,0.40), metal(0x1e1e1e,0.4));
+      recv.position.set(0,0.015,-0.03);
+      const hg = new THREE.Mesh(box3p(0.068,0.058,0.18), metal(0x282828,0.5));
+      hg.position.set(0,0.010,-0.20);
+      const barrelMesh = new THREE.Mesh(cyl(0.013,0.013,0.26), metal(0x242424,0.25,1));
+      barrelMesh.rotation.x=Math.PI/2; barrelMesh.position.set(0,0.012,-0.28);
+      const fh = new THREE.Mesh(cyl(0.018,0.013,0.04,6), metal(0x111111,0.2,1));
+      fh.rotation.x=Math.PI/2; fh.position.set(0,0.012,-0.42);
+      const grip = new THREE.Mesh(box3p(0.046,0.108,0.050), rubber(0x151515));
+      grip.position.set(0,-0.062,0.055); grip.rotation.x=0.18;
+      const mag = new THREE.Mesh(box3p(0.036,0.10,0.048), metal(0x1e1e1e));
+      mag.position.set(0,-0.062,-0.025); mag.rotation.x=-0.10;
+      const stock = new THREE.Mesh(box3p(0.054,0.055,0.18), metal(0x1a1a1a));
+      stock.position.set(0,0.008,0.19);
+      g.add(recv,hg,barrelMesh,fh,grip,mag,stock);
+      tagMuzzle(g, -0.445);
       weaponMeshes['carbine'] = g;
     }
+
     // rpg
     {
       const g = new THREE.Group();
-      const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.75, 8), std3p(0x4a3a28));
-      tube.rotation.x = Math.PI / 2;
-      tube.position.set(0, 0, -0.20);
-      const nose = new THREE.Mesh(new THREE.ConeGeometry(0.044, 0.24, 8), std3p(0x333333));
-      nose.rotation.x = Math.PI / 2;
-      nose.position.set(0, 0, -0.66);
-      g.add(tube, nose);
+      const tube = new THREE.Mesh(cyl(0.045,0.045,0.75,12), metal(0x3a2e1e,0.7,0.3));
+      tube.rotation.x = Math.PI / 2; tube.position.set(0,0,-0.20);
+      // 방아쇠 메커니즘 박스
+      const trigBox = new THREE.Mesh(box3p(0.065,0.062,0.14), metal(0x2a2218,0.6,0.3));
+      trigBox.position.set(0,-0.010,-0.08);
+      // 조준기 (front + rear)
+      const sightF = new THREE.Mesh(box3p(0.008,0.040,0.008), metal(0x444444));
+      sightF.position.set(0,0.052,-0.36);
+      const sightR = new THREE.Mesh(box3p(0.008,0.030,0.008), metal(0x444444));
+      sightR.position.set(0,0.052,0.00);
+      // 그립
+      const grip = new THREE.Mesh(box3p(0.050,0.115,0.052), rubber(0x1a1208));
+      grip.position.set(0,-0.080,-0.05); grip.rotation.x=0.15;
+      // 로켓 탄두 (앞에 돌출)
+      const warhead = new THREE.Mesh(new THREE.ConeGeometry(0.042,0.20,10), metal(0x2a2a2a,0.4));
+      warhead.rotation.x=Math.PI/2; warhead.position.set(0,0,-0.625);
+      const warBase = new THREE.Mesh(cyl(0.044,0.044,0.12,10), metal(0x333333,0.5));
+      warBase.rotation.x=Math.PI/2; warBase.position.set(0,0,-0.505);
+      g.add(tube,trigBox,sightF,sightR,grip,warhead,warBase);
+      tagMuzzle(g, -0.73);
       weaponMeshes['rpg'] = g;
     }
 
@@ -1038,35 +1225,149 @@ export class Renderer {
 
   // 파티클
   spawnSmokeParticle(position) {
-    const geo  = new THREE.BoxGeometry(0.05,0.05,0.05);
-    const mat  = new THREE.MeshBasicMaterial({ color:0xaaaaaa, transparent:true, opacity:0.6 });
+    const geo  = new THREE.SphereGeometry(0.04, 6, 6);
+    const mat  = new THREE.MeshBasicMaterial({ color:0x999999, transparent:true, opacity:0.55 });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.copy(position);
     this.scene.add(mesh);
-    this.particles.push({ mesh, life:1, baseSize:0.05,
-      vel: new THREE.Vector3((Math.random()-0.5)*0.04, Math.random()*0.02+0.01, (Math.random()-0.5)*0.04) });
+    this.particles.push({ mesh, life:1, baseSize:0.04,
+      vel: new THREE.Vector3((Math.random()-0.5)*0.04, Math.random()*0.025+0.012, (Math.random()-0.5)*0.04),
+      type: 'smoke_generic' });
   }
 
+  // ── 고품질 총구 불꽃 + 연기 이펙트 ──
   spawnMuzzleFlash(position, front, strong = false) {
-    const group = new THREE.Group();
-    group.position.copy(position).addScaledVector(front, 0.7);
-    const flashMat = new THREE.MeshBasicMaterial({
-      color: strong ? 0xfff1a8 : 0xffd25a,
-      transparent: true,
-      opacity: 0.95,
-      depthWrite: false,
+
+    // ① 총구 위치 (총열 끝)
+    const muzzlePos = position.clone().addScaledVector(front, strong ? 1.0 : 0.75);
+
+    // ② 코어 섬광 (밝은 흰색-노랑)
+    {
+      const group = new THREE.Group();
+      group.position.copy(muzzlePos);
+
+      const coreR   = strong ? 0.20 : 0.12;
+      const coreMat = new THREE.MeshBasicMaterial({ color: 0xfffce8, transparent:true, opacity:1.0, depthWrite:false });
+      const core    = new THREE.Mesh(new THREE.SphereGeometry(coreR, 10, 10), coreMat);
+      group.add(core);
+
+      // 방사형 스트릭 (4방향)
+      const streakMat = new THREE.MeshBasicMaterial({ color: strong ? 0xffee88 : 0xffdd55, transparent:true, opacity:0.9, depthWrite:false });
+      const streakLen  = strong ? 2.2 : 1.1;
+      const streakR    = strong ? 0.055 : 0.030;
+      // 정면 스트릭 (총구 방향)
+      const frontStreak = new THREE.Mesh(new THREE.CylinderGeometry(streakR*0.5, streakR, streakLen, 8), streakMat.clone());
+      frontStreak.rotation.z = Math.PI/2;
+      frontStreak.position.set(streakLen*0.42, 0, 0);
+      group.add(frontStreak);
+      // 십자 스트릭들
+      for (let a = 0; a < 4; a++) {
+        const s = new THREE.Mesh(new THREE.CylinderGeometry(streakR*0.3, streakR*0.5, streakLen*0.55, 6), streakMat.clone());
+        s.rotation.z = Math.PI/2;
+        const ang = (a / 4) * Math.PI * 2 + Math.PI/4;
+        s.position.set(Math.cos(ang)*streakLen*0.22, Math.sin(ang)*streakLen*0.22, 0);
+        s.rotation.x = ang;
+        group.add(s);
+      }
+
+      group.lookAt(muzzlePos.clone().add(front));
+      this.scene.add(group);
+      this.particles.push({ mesh:group, life: strong ? 0.18 : 0.10, type:'muzzle', baseSize:1 });
+    }
+
+    // ③ 불꽃 파티클 (2~4개, 총구 앞쪽으로 퍼짐)
+    const fireCount = strong ? 5 : 2;
+    for (let i = 0; i < fireCount; i++) {
+      const r   = 0.04 + Math.random() * (strong ? 0.10 : 0.06);
+      const geo = new THREE.SphereGeometry(r, 7, 7);
+      const mat = new THREE.MeshBasicMaterial({
+        color: new THREE.Color().setHSL(0.06 + Math.random()*0.05, 1.0, 0.55),
+        transparent:true, opacity:0.92, depthWrite:false
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.copy(muzzlePos);
+      const spread = 0.06;
+      const vel = front.clone().multiplyScalar(0.06 + Math.random()*0.04).add(
+        new THREE.Vector3((Math.random()-0.5)*spread, (Math.random()-0.5)*spread*0.5, (Math.random()-0.5)*spread)
+      );
+      this.scene.add(mesh);
+      this.particles.push({ mesh, life:1, maxLife: strong ? 0.22 : 0.14, type:'muzzle_fire', vel, baseSize:r });
+    }
+
+    // ④ 연기 (총구에서 피어오름 — 3~6개 구체)
+    const smokeCount = strong ? 6 : 3;
+    for (let i = 0; i < smokeCount; i++) {
+      const r   = 0.05 + Math.random() * 0.08;
+      const col = 0x606060 + Math.floor(Math.random() * 0x303030);
+      const geo = new THREE.SphereGeometry(r, 7, 7);
+      const mat = new THREE.MeshBasicMaterial({ color:col, transparent:true, opacity:0.0, depthWrite:false });
+      const mesh = new THREE.Mesh(geo, mat);
+      // 연기는 총구에서 조금 뒤쪽에서 시작
+      mesh.position.copy(muzzlePos).addScaledVector(front, -0.05 + Math.random()*0.08);
+      const vel = new THREE.Vector3(
+        (Math.random()-0.5)*0.02,
+        0.018 + Math.random()*0.025,
+        (Math.random()-0.5)*0.02
+      );
+      this.scene.add(mesh);
+      this.particles.push({ mesh, life:1, maxLife: 0.9 + Math.random()*0.6, type:'muzzle_smoke', vel, baseSize:r, delay: i*0.03 });
+    }
+
+    // ⑤ 탄피 배출 파티클 (작은 황동색 원통)
+    {
+      const geo = new THREE.CylinderGeometry(0.008, 0.008, 0.024, 8);
+      const mat = new THREE.MeshBasicMaterial({ color:0xcc9933 });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.copy(muzzlePos).addScaledVector(front, -0.35);
+      mesh.position.x += 0.06;
+      const vel = new THREE.Vector3(
+        0.04 + Math.random()*0.03,
+        0.05 + Math.random()*0.03,
+        (Math.random()-0.5)*0.02
+      );
+      this.scene.add(mesh);
+      this.particles.push({ mesh, life:1, maxLife: 0.6, type:'shell_case', vel, baseSize:1 });
+    }
+  }
+
+  // ── 탄두 트레이서 (총알이 날아가는 빛줄기) ──
+  spawnBulletTracer(startPos, direction, weaponId = 'm4a1') {
+    const isEnergy = weaponId === 'rail' || weaponId === 'burst';
+    const isShotgun = weaponId === 'shotgun';
+    const tracerColor = isEnergy ? 0x44aaff : (isShotgun ? 0xffdd88 : 0xffffcc);
+    const tracerLen   = isEnergy ? 1.2 : (isShotgun ? 0.4 : 0.7);
+    const tracerR     = isEnergy ? 0.014 : 0.008;
+    const tracerSpeed = isEnergy ? 0.70 : 0.55;
+
+    const geo = new THREE.CylinderGeometry(tracerR*0.3, tracerR, tracerLen, 6);
+    const mat = new THREE.MeshBasicMaterial({ color:tracerColor, transparent:true, opacity:0.85, depthWrite:false });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.copy(startPos);
+
+    // 방향으로 회전
+    const axis   = new THREE.Vector3(0,1,0);
+    const target = direction.clone().normalize();
+    const quat   = new THREE.Quaternion().setFromUnitVectors(axis, target);
+    mesh.quaternion.copy(quat);
+
+    this.scene.add(mesh);
+    this.particles.push({
+      mesh, life:1, maxLife: 0.35,
+      type: 'tracer',
+      vel: direction.clone().normalize().multiplyScalar(tracerSpeed),
+      baseSize:1
     });
-    const flash = new THREE.Mesh(new THREE.SphereGeometry(strong ? 0.16 : 0.1, 8, 8), flashMat);
-    group.add(flash);
-    const streak = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.018, strong ? 0.07 : 0.045, strong ? 1.6 : 0.75, 8),
-      flashMat.clone()
-    );
-    streak.rotation.z = Math.PI / 2;
-    group.add(streak);
-    group.lookAt(position.clone().add(front));
-    this.scene.add(group);
-    this.particles.push({ mesh: group, life: strong ? 0.16 : 0.1, type: 'muzzle', baseSize: 1 });
+
+    // 에너지 무기 전용: 보조 글로우
+    if (isEnergy) {
+      const geo2 = new THREE.CylinderGeometry(tracerR*1.5, tracerR*2, tracerLen*1.2, 6);
+      const mat2 = new THREE.MeshBasicMaterial({ color:0x0066ff, transparent:true, opacity:0.30, depthWrite:false });
+      const glow = new THREE.Mesh(geo2, mat2);
+      glow.position.copy(startPos);
+      glow.quaternion.copy(quat);
+      this.scene.add(glow);
+      this.particles.push({ mesh:glow, life:1, maxLife:0.35, type:'tracer', vel: direction.clone().normalize().multiplyScalar(tracerSpeed), baseSize:1 });
+    }
   }
 
   spawnBulletImpact(position, headshot = false) {
@@ -1172,6 +1473,45 @@ export class Renderer {
         p.mesh.traverse(child => {
           if (child.material) child.material.opacity = Math.min(1, p.life * 8);
         });
+        return true;
+      }
+      // 불꽃 (총구 fire)
+      if (p.type === 'muzzle_fire') {
+        p.vel.y += 0.003;
+        p.mesh.position.addScaledVector(p.vel, 60 * dt);
+        const s = p.baseSize * (0.5 + p.life * 1.2);
+        p.mesh.scale.setScalar(s / p.baseSize);
+        p.mesh.material.opacity = p.life * 0.9;
+        p.mesh.material.color.setHSL(0.08 * p.life, 1, 0.5 + p.life * 0.15);
+        return true;
+      }
+      // 연기 (총구 smoke)
+      if (p.type === 'muzzle_smoke') {
+        p.vel.y += 0.0008;
+        p.mesh.position.addScaledVector(p.vel, 60 * dt);
+        const age  = 1 - p.life;
+        const s    = p.baseSize * (1 + age * 6.0);
+        p.mesh.scale.setScalar(s / p.baseSize);
+        // 처음엔 페이드인, 후반엔 페이드아웃
+        p.mesh.material.opacity = age < 0.15
+          ? (age / 0.15) * 0.38
+          : p.life * 0.38;
+        return true;
+      }
+      // 탄피
+      if (p.type === 'shell_case') {
+        p.vel.y -= 0.015;
+        p.vel.x *= 0.94;
+        p.mesh.position.addScaledVector(p.vel, 60 * dt);
+        p.mesh.rotation.x += 0.35;
+        p.mesh.rotation.z += 0.20;
+        p.mesh.material.opacity = p.life > 0.3 ? 1.0 : p.life / 0.3;
+        return true;
+      }
+      // 탄두 트레이서
+      if (p.type === 'tracer') {
+        p.mesh.position.addScaledVector(p.vel, 60 * dt);
+        p.mesh.material.opacity = p.life * 0.85;
         return true;
       }
       if (p.type === 'spark') {
