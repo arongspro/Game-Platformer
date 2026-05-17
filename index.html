@@ -1218,5 +1218,171 @@
     });
   });
 </script>
+
+<!-- ── 비디오 설정 패널 ── -->
+<div id="video-settings-panel" style="
+  display: none;
+  position: fixed;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(12, 14, 20, 0.97);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 12px;
+  padding: 28px 32px;
+  min-width: 340px;
+  z-index: 9999;
+  color: #e8eaf0;
+  font-family: 'Segoe UI', sans-serif;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.7);
+  user-select: none;
+">
+  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:22px;">
+    <span style="font-size:16px; font-weight:700; letter-spacing:0.04em; color:#fff;">🎮 비디오 설정</span>
+    <button id="video-settings-close" style="background:none;border:none;color:#aaa;font-size:20px;cursor:pointer;padding:0 4px;line-height:1;">✕</button>
+  </div>
+
+  <!-- 입자 효과 -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+    <span style="font-size:13px;color:#c5c8d4;">입자 효과</span>
+    <label class="vs-toggle">
+      <input type="checkbox" id="vs-particles" checked>
+      <span class="vs-slider"></span>
+    </label>
+  </div>
+
+  <!-- 블록 디테일 -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+    <span style="font-size:13px;color:#c5c8d4;">블록 디테일</span>
+    <label class="vs-toggle">
+      <input type="checkbox" id="vs-block-detail" checked>
+      <span class="vs-slider"></span>
+    </label>
+  </div>
+
+  <!-- 쉐이더 -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:22px;">
+    <span style="font-size:13px;color:#c5c8d4;">PBR 쉐이더</span>
+    <label class="vs-toggle">
+      <input type="checkbox" id="vs-shader" checked>
+      <span class="vs-slider"></span>
+    </label>
+  </div>
+
+  <!-- 시야각 -->
+  <div style="margin-bottom:8px;">
+    <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+      <span style="font-size:13px;color:#c5c8d4;">시야각 (FOV)</span>
+      <span id="vs-fov-val" style="font-size:13px;color:#7eb8ff;font-weight:600;">60°</span>
+    </div>
+    <input type="range" id="vs-fov" min="40" max="120" value="60" step="1" style="
+      width:100%;
+      accent-color:#5c9eff;
+      cursor:pointer;
+      height:4px;
+    ">
+    <div style="display:flex;justify-content:space-between;margin-top:4px;">
+      <span style="font-size:10px;color:#555;">40°</span>
+      <span style="font-size:10px;color:#555;">120°</span>
+    </div>
+  </div>
+
+  <div style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.07);text-align:center;">
+    <span style="font-size:10px;color:#444;">설정은 자동 저장됩니다</span>
+  </div>
+</div>
+
+<style>
+/* 토글 스위치 */
+.vs-toggle { position:relative; display:inline-block; width:42px; height:22px; }
+.vs-toggle input { opacity:0; width:0; height:0; }
+.vs-slider {
+  position:absolute; cursor:pointer; inset:0;
+  background:#2a2d38; border-radius:22px;
+  transition:0.25s;
+}
+.vs-slider:before {
+  content:""; position:absolute;
+  width:16px; height:16px; border-radius:50%;
+  left:3px; top:3px;
+  background:#fff;
+  transition:0.25s;
+}
+input:checked + .vs-slider { background:#3a7fff; }
+input:checked + .vs-slider:before { transform:translateX(20px); }
+</style>
+
+<script type="module">
+  // 비디오 설정 패널 로직
+  const panel = document.getElementById('video-settings-panel');
+  const closeBtn = document.getElementById('video-settings-close');
+  const vsParticles = document.getElementById('vs-particles');
+  const vsBlockDetail = document.getElementById('vs-block-detail');
+  const vsShader = document.getElementById('vs-shader');
+  const vsFov = document.getElementById('vs-fov');
+  const vsFovVal = document.getElementById('vs-fov-val');
+
+  // 저장된 설정 불러오기
+  function loadSettings() {
+    const s = JSON.parse(localStorage.getItem('videoSettings') || '{}');
+    if (s.particles !== undefined) vsParticles.checked = s.particles;
+    if (s.blockDetail !== undefined) vsBlockDetail.checked = s.blockDetail;
+    if (s.shader !== undefined) vsShader.checked = s.shader;
+    if (s.fov !== undefined) { vsFov.value = s.fov; vsFovVal.textContent = s.fov + '°'; }
+  }
+
+  function saveSettings() {
+    localStorage.setItem('videoSettings', JSON.stringify({
+      particles: vsParticles.checked,
+      blockDetail: vsBlockDetail.checked,
+      shader: vsShader.checked,
+      fov: parseInt(vsFov.value),
+    }));
+  }
+
+  function applySettings() {
+    const r = window._gameRenderer;
+    if (!r) return;
+    r.setParticlesEnabled(vsParticles.checked);
+    r.setBlockDetailEnabled(vsBlockDetail.checked);
+    r.setShaderEnabled(vsShader.checked);
+    r.setFov(parseInt(vsFov.value));
+  }
+
+  // 초기 적용 (게임 렌더러 준비 후)
+  function tryApplyOnReady() {
+    if (window._gameRenderer) {
+      loadSettings();
+      applySettings();
+    } else {
+      setTimeout(tryApplyOnReady, 500);
+    }
+  }
+  tryApplyOnReady();
+
+  // 이벤트
+  vsParticles.addEventListener('change', () => { saveSettings(); applySettings(); });
+  vsBlockDetail.addEventListener('change', () => { saveSettings(); applySettings(); });
+  vsShader.addEventListener('change', () => { saveSettings(); applySettings(); });
+  vsFov.addEventListener('input', () => {
+    vsFovVal.textContent = vsFov.value + '°';
+    saveSettings();
+    applySettings();
+  });
+
+  closeBtn.addEventListener('click', () => { panel.style.display = 'none'; });
+
+  // ESC로 열기 (포인터락 해제 시)
+  document.addEventListener('pointerlockchange', () => {
+    if (!document.pointerLockElement) {
+      // 포인터락 해제 = 게임 정지 상태 → 설정 패널 표시
+      panel.style.display = 'block';
+    } else {
+      panel.style.display = 'none';
+    }
+  });
+
+  // 외부에서 단축키로 열기 지원
+  window.openVideoSettings = () => { panel.style.display = 'block'; };
+</script>
 </body>
 </html>
