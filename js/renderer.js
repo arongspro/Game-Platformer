@@ -125,8 +125,21 @@ const BOX_FRAG = /* glsl */`
       rough = mix(uRoughness, uRoughness * 1.2, grout) + micro * 0.15;
 
     } else if (uPattern == 1) {
-      // Stripe - 금속 패널
-      float s = fract(uv.x * uTileScale * 0.5);
+      // Stripe - 금속 패널 (월드 좌표 기반으로 줄무늬 방향 고정)
+      // 법선 방향에 따라 수평/수직 좌표 선택 (UV 왜곡 방지)
+      vec3 absN = abs(vNormal);
+      float stripeCoord;
+      if (absN.y > 0.5) {
+        // 위/아래 면 → XZ 평면 기준
+        stripeCoord = vWorldPos.x;
+      } else if (absN.x > 0.5) {
+        // 좌/우 면 → YZ 평면 기준
+        stripeCoord = vWorldPos.y;
+      } else {
+        // 앞/뒤 면 → XY 평면 기준
+        stripeCoord = vWorldPos.y;
+      }
+      float s = fract(stripeCoord * uTileScale * 0.5);
       float edge = smoothstep(0.44, 0.50, s) - smoothstep(0.50, 0.56, s);
       col = uBaseColor * (0.85 + s * 0.25);
       // 스크래치 노이즈
@@ -975,6 +988,7 @@ export class Renderer {
   }
 
   spawnPadBurst(position, color = 0xff66c4) {
+    if (!this.getParticlesEnabled()) return;
     for (let i = 0; i < 10; i++) {
       const mesh = new THREE.Mesh(
         new THREE.BoxGeometry(0.045, 0.045, 0.045),
@@ -2006,6 +2020,7 @@ export class Renderer {
 
   // 파티클
   spawnSmokeParticle(position) {
+    if (!this.getParticlesEnabled()) return;
     const geo  = new THREE.SphereGeometry(0.04, 6, 6);
     const mat  = new THREE.MeshBasicMaterial({ color:0x999999, transparent:true, opacity:0.55 });
     const mesh = new THREE.Mesh(geo, mat);
@@ -2018,6 +2033,7 @@ export class Renderer {
 
   // ── 고품질 총구 불꽃 + 연기 이펙트 ──
   spawnMuzzleFlash(position, front, strong = false) {
+    if (!this.getParticlesEnabled()) return;
 
     // ① 총구 위치 (총열 끝)
     const muzzlePos = position.clone().addScaledVector(front, strong ? 1.0 : 0.75);
@@ -2113,6 +2129,7 @@ export class Renderer {
 
   // ── 탄두 트레이서 (총알이 날아가는 빛줄기) ──
   spawnBulletTracer(startPos, direction, weaponId = 'm4a1') {
+    if (!this.getParticlesEnabled()) return;
     const isEnergy = weaponId === 'rail' || weaponId === 'burst';
     const isShotgun = weaponId === 'shotgun';
     const tracerColor = isEnergy ? 0x44aaff : (isShotgun ? 0xffdd88 : 0xffffcc);
@@ -2152,6 +2169,7 @@ export class Renderer {
   }
 
   spawnBulletImpact(position, headshot = false) {
+    if (!this.getParticlesEnabled()) return;
     const color = headshot ? 0xff3030 : 0xfff2c0;
     for (let i = 0; i < (headshot ? 16 : 9); i++) {
       const mesh = new THREE.Mesh(
@@ -2171,6 +2189,7 @@ export class Renderer {
 
   // ── RPG 로켓 폭발 이펙트 (수류탄과 유사하지만 더 크고 강렬) ──
   spawnRocketExplosion(pos) {
+    if (!this.getParticlesEnabled()) return;
 
     // 플래시 (더 큼)
     const flashGeo = new THREE.SphereGeometry(0.5, 8, 8);
@@ -2243,6 +2262,7 @@ export class Renderer {
   }
 
   updateParticles(dt) {
+    if (!this.getParticlesEnabled()) return;
     this.particles = this.particles.filter(p => {
       // rpg 파티클은 maxLife 기반으로 수명 감소 (수류탄과 동일 패턴)
       if (p.maxLife) p.life -= dt / p.maxLife;
@@ -2410,4 +2430,58 @@ export class Renderer {
   getBoxes()     { return this.boxMeshes; }
   getTexPlayer() { return this.texPlayer; }
   getTexWeapon() { return this.texWeapon; }
+
+  // ════════════════════════════════════════════════════════════════
+  // ── 비디오 설정 API ──
+  // ════════════════════════════════════════════════════════════════
+
+  /** 입자 효과 켜기/끄기 */
+  setParticlesEnabled(enabled) {
+    this._particlesEnabled = enabled;
+    if (!enabled) {
+      for (const p of this.particles) this.scene.remove(p.mesh);
+      this.particles = [];
+    }
+  }
+  getParticlesEnabled() { return this._particlesEnabled !== false; }
+
+  /** 시야각(FOV) 설정 (도 단위, 40~120) */
+  setFov(fov) {
+    this._baseFov = Math.max(40, Math.min(120, fov));
+    this.camera.fov = this._baseFov;
+    this.camera.updateProjectionMatrix();
+  }
+  getFov() { return this._baseFov ?? 60; }
+
+  /** 블록 디테일(프로시저럴 텍스처 노이즈) 켜기/끄기 */
+  setBlockDetailEnabled(enabled) {
+    this._blockDetailEnabled = enabled;
+    if (!this._shaderMats) return;
+    for (const mat of this._shaderMats) {
+      if (!mat.uniforms?.uBlockDetail) continue;
+      mat.uniforms.uBlockDetail.value = enabled ? 1 : 0;
+    }
+  }
+  getBlockDetailEnabled() { return this._blockDetailEnabled !== false; }
+
+  /** 커스텀 PBR 쉐이더 켜기/끄기 (끄면 단순 Lambert 사용) */
+  setShaderEnabled(enabled) {
+    this._shaderEnabled = enabled;
+    if (!this.worldGroups) return;
+    for (const mesh of this.worldGroups) {
+      if (!mesh.isMesh) continue;
+      if (enabled) {
+        if (mesh._shaderMat) mesh.material = mesh._shaderMat;
+      } else {
+        if (!mesh._shaderMat) mesh._shaderMat = mesh.material;
+        if (!mesh._simpleMat) {
+          const col = mesh._shaderMat?.uniforms?.uBaseColor?.value;
+          const hex = col ? new THREE.Color(col.x, col.y, col.z).getHex() : 0x888888;
+          mesh._simpleMat = new THREE.MeshLambertMaterial({ color: hex });
+        }
+        mesh.material = mesh._simpleMat;
+      }
+    }
+  }
+  getShaderEnabled() { return this._shaderEnabled !== false; }
 }
