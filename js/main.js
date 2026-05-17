@@ -955,6 +955,9 @@ function loop() {
   camCtrl.update(player.pos, player.isSliding, player.bobAmp,
                  player.moveTime, player.isJumping, player.currentRoll);
 
+  // ── 그림자 카메라를 플레이어 위치에 동적 동기화 (선명한 근거리 그림자) ──
+  renderer.updateShadowCamera(player.pos);
+
   if (isLocked()) {
     adsVignette.style.opacity = player.adsProgress;
 
