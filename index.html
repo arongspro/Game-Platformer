@@ -1094,7 +1094,8 @@
       <span>ROOMS</span>
       <span>RANKED</span>
       <span>LOADOUT</span>
-            <button onclick="location.href='account.html'" style="color:#00ffe0;border:2px solid #00ffe0;padding:8px 20px;font-family:'Orbitron',monospace;font-size:11px;letter-spacing:4px;cursor:pointer;background:rgba(0,255,224,0.12);box-shadow:0 0 18px rgba(0,255,224,0.35),inset 0 0 12px rgba(0,255,224,0.06);text-shadow:0 0 12px rgba(0,255,224,0.9);pointer-events:auto;transition:all 0.15s;" onmouseover="this.style.background='rgba(0,255,224,0.26)';this.style.boxShadow='0 0 32px rgba(0,255,224,0.6)'" onmouseout="this.style.background='rgba(0,255,224,0.12)';this.style.boxShadow='0 0 18px rgba(0,255,224,0.35)'">[ ACCOUNT ]</button>
+      <button onclick="location.href='account.html'" style="color:#00ffe0;border:2px solid #00ffe0;padding:8px 20px;font-family:'Orbitron',monospace;font-size:11px;letter-spacing:4px;cursor:pointer;background:rgba(0,255,224,0.12);box-shadow:0 0 18px rgba(0,255,224,0.35),inset 0 0 12px rgba(0,255,224,0.06);text-shadow:0 0 12px rgba(0,255,224,0.9);pointer-events:auto;transition:all 0.15s;" onmouseover="this.style.background='rgba(0,255,224,0.26)';this.style.boxShadow='0 0 32px rgba(0,255,224,0.6)'" onmouseout="this.style.background='rgba(0,255,224,0.12)';this.style.boxShadow='0 0 18px rgba(0,255,224,0.35)'">[ ACCOUNT ]</button>
+      <button onclick="window.openVideoSettings && window.openVideoSettings()" style="color:#a78bfa;border:2px solid #a78bfa;padding:8px 20px;font-family:'Orbitron',monospace;font-size:11px;letter-spacing:4px;cursor:pointer;background:rgba(167,139,250,0.10);box-shadow:0 0 18px rgba(167,139,250,0.30),inset 0 0 12px rgba(167,139,250,0.05);text-shadow:0 0 12px rgba(167,139,250,0.9);pointer-events:auto;transition:all 0.15s;" onmouseover="this.style.background='rgba(167,139,250,0.24)';this.style.boxShadow='0 0 32px rgba(167,139,250,0.55)'" onmouseout="this.style.background='rgba(167,139,250,0.10)';this.style.boxShadow='0 0 18px rgba(167,139,250,0.30)'">[ VIDEO ]</button>
     </div>
   </div>
   <h1>VOID PROTOCOL</h1>
@@ -1371,18 +1372,11 @@ input:checked + .vs-slider:before { transform:translateX(20px); }
 
   closeBtn.addEventListener('click', () => { panel.style.display = 'none'; });
 
-  // ESC로 열기 (포인터락 해제 시)
-  document.addEventListener('pointerlockchange', () => {
-    if (!document.pointerLockElement) {
-      // 포인터락 해제 = 게임 정지 상태 → 설정 패널 표시
-      panel.style.display = 'block';
-    } else {
-      panel.style.display = 'none';
-    }
-  });
-
-  // 외부에서 단축키로 열기 지원
-  window.openVideoSettings = () => { panel.style.display = 'block'; };
+  // VIDEO 버튼 또는 외부에서 호출
+  window.openVideoSettings = () => {
+    loadSettings();
+    panel.style.display = 'block';
+  };
 </script>
 </body>
 </html>
