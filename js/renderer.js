@@ -1192,6 +1192,7 @@ export class Renderer {
       g.add(frontTube,midTube,backFlare,trigBox,tgBox,tgLev,sightF2,sightFT,sightR2,sightHole,grip,shPad,warhead,warBody);
       tagMuzzle(g,-0.745);
       weaponMeshes['rpg'] = g;
+    }
     // 기본 무기 mesh (m4a1 box fallback) 추가
     gunGroup.add(weaponMeshes['m4a1']);
 
