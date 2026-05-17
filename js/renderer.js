@@ -49,6 +49,7 @@ const BOX_FRAG = /* glsl */`
   uniform vec3  uAmbientColor;
   uniform float uAmbientIntensity;
   uniform sampler2D uShadowMap;
+  uniform int   uBlockDetail;
 
   varying vec3 vWorldPos;
   varying vec3 vNormal;
@@ -109,6 +110,9 @@ const BOX_FRAG = /* glsl */`
   vec4 getPatternAlbedoRoughness(vec2 uv) {
     float rough = uRoughness;
     vec3  col   = uBaseColor;
+
+    // 블록 디테일 OFF: 단순 베이스 컬러만
+    if (uBlockDetail == 0) return vec4(col, rough);
 
     if (uPattern == 0) {
       // Checker - 콘크리트 타일
@@ -244,13 +248,13 @@ const BOX_FRAG = /* glsl */`
     float roughness = clamp(pr.a, 0.04, 1.0);
     float metalness = uMetalness;
 
-    // 프로시저럴 노멀맵 적용
-    float normalStrength = (uPattern == 2) ? 4.0 : (uPattern == 0) ? 2.5 : 1.5;
-    vec3 procN = proceduralNormal(uv * uTileScale, normalStrength);
-    // 탄젠트 공간 → 월드 공간 근사 (법선 교란)
+    // 프로시저럴 노멀맵 적용 (블록 디테일 ON일 때만)
     vec3 N = normalize(vNormal);
-    // 법선을 약하게 교란 (표면 높이 기반)
-    N = normalize(N + procN * 0.35);
+    if (uBlockDetail == 1) {
+      float normalStrength = (uPattern == 2) ? 4.0 : (uPattern == 0) ? 2.5 : 1.5;
+      vec3 procN = proceduralNormal(uv * uTileScale, normalStrength);
+      N = normalize(N + procN * 0.35);
+    }
 
     vec3 V = normalize(vViewPos);
 
@@ -456,6 +460,7 @@ export class Renderer {
       uTileScale:        { value: tileScale },
       uPattern:          { value: patternIdx },
       uTime:             { value: 0.0 },
+      uBlockDetail:      { value: 1 },
       uSunDir:           { value: new THREE.Vector3(-20, 60, -20).normalize() },
       uSunColor:         { value: new THREE.Vector3(1.0, 0.95, 0.82) },
       uSunIntensity:     { value: 2.8 },
@@ -2464,7 +2469,7 @@ export class Renderer {
   }
   getBlockDetailEnabled() { return this._blockDetailEnabled !== false; }
 
-  /** 커스텀 PBR 쉐이더 켜기/끄기 (끄면 단순 Lambert 사용) */
+  /** 커스텀 PBR 쉐이더 켜기/끄기 (끄면 MeshStandardMaterial 사용 - 그림자 동일) */
   setShaderEnabled(enabled) {
     this._shaderEnabled = enabled;
     if (!this.worldGroups) return;
@@ -2477,7 +2482,12 @@ export class Renderer {
         if (!mesh._simpleMat) {
           const col = mesh._shaderMat?.uniforms?.uBaseColor?.value;
           const hex = col ? new THREE.Color(col.x, col.y, col.z).getHex() : 0x888888;
-          mesh._simpleMat = new THREE.MeshLambertMaterial({ color: hex });
+          // MeshStandardMaterial: receiveShadow/castShadow이 ShaderMaterial과 동일하게 동작
+          mesh._simpleMat = new THREE.MeshStandardMaterial({
+            color: hex,
+            roughness: 0.8,
+            metalness: 0.0,
+          });
         }
         mesh.material = mesh._simpleMat;
       }
