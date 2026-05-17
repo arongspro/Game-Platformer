@@ -592,8 +592,23 @@ window.addEventListener('keydown', e => {
 
 // ── Callback bindings ──
 player.onShoot     = () => {
-  const front = camCtrl.getFront();
-  renderer.spawnMuzzleFlash(camCtrl.getHeadPos(), front, player.getLoadoutWeapon().scope);
+  const front  = camCtrl.getFront();
+  const weapon = player.getLoadoutWeapon();
+  renderer.spawnMuzzleFlash(camCtrl.getHeadPos(), front, weapon.scope);
+
+  // 탄두 트레이서 (산탄총은 여러 방향, 나머지는 단일)
+  const startPos = camCtrl.getHeadPos().clone().addScaledVector(front, 0.8);
+  if (weapon.id === 'shotgun') {
+    for (let p = 0; p < (weapon.pellets || 6); p++) {
+      const spread = weapon.spread || 0.18;
+      const dir = front.clone().add(new THREE.Vector3(
+        (Math.random()-0.5)*spread, (Math.random()-0.5)*spread*0.5, (Math.random()-0.5)*spread
+      )).normalize();
+      renderer.spawnBulletTracer(startPos.clone(), dir, weapon.id);
+    }
+  } else {
+    renderer.spawnBulletTracer(startPos, front, weapon.id);
+  }
 };
 player.onHudUpdate = updateHud;
 player.onDie = () => {
