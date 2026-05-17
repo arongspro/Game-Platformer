@@ -129,27 +129,21 @@ const BOX_FRAG = /* glsl */`
       rough = mix(uRoughness, uRoughness * 1.2, grout) + micro * 0.15;
 
     } else if (uPattern == 1) {
-      // Stripe - 금속 패널 (월드 좌표 기반으로 줄무늬 방향 고정)
-      // 법선 방향에 따라 수평/수직 좌표 선택 (UV 왜곡 방지)
+      // Stripe - 금속 패널 (월드 좌표 기반, fbm 노이즈 제거)
       vec3 absN = abs(vNormal);
       float stripeCoord;
       if (absN.y > 0.5) {
-        // 위/아래 면 → XZ 평면 기준
-        stripeCoord = vWorldPos.x;
+        stripeCoord = vWorldPos.x;   // 바닥/천장 → X축 기준 수직 줄
       } else if (absN.x > 0.5) {
-        // 좌/우 면 → YZ 평면 기준
-        stripeCoord = vWorldPos.y;
+        stripeCoord = vWorldPos.y;   // 좌우 벽 → Y축(높이) 기준
       } else {
-        // 앞/뒤 면 → XY 평면 기준
-        stripeCoord = vWorldPos.y;
+        stripeCoord = vWorldPos.x;   // 앞뒤 벽 → X축 기준
       }
       float s = fract(stripeCoord * uTileScale * 0.5);
-      float edge = smoothstep(0.44, 0.50, s) - smoothstep(0.50, 0.56, s);
-      col = uBaseColor * (0.85 + s * 0.25);
-      // 스크래치 노이즈
-      float scratch = fbm(uv * vec2(uTileScale * 0.2, uTileScale * 8.0)) * 0.06;
-      col += scratch;
-      rough = mix(0.2, 0.55, s) + scratch;
+      // 줄무늬 경계: 날카로운 패널 경계선
+      float stripe = smoothstep(0.0, 0.04, s) * (1.0 - smoothstep(0.46, 0.50, s));
+      col = uBaseColor * (0.80 + stripe * 0.30);
+      rough = mix(0.25, 0.55, stripe);
 
     } else if (uPattern == 2) {
       // Noise - 거친 암석/흙
@@ -217,26 +211,25 @@ const BOX_FRAG = /* glsl */`
     return 0.75 + 0.25 * max(0.0, N.y);
   }
 
-  // ── PCF 소프트 섀도우 (3×3 커널) ──
+  // ── PCF 소프트 섀도우 (5×5 커널, 바닥면 bias 최적화) ──
   float ShadowCalculation(vec4 fragPosLightSpace, vec3 normal, vec3 lightDir) {
-    // NDC → [0,1]
     vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
     projCoords = projCoords * 0.5 + 0.5;
-    // 라이트 절두체 밖은 그림자 없음
     if (projCoords.z > 1.0) return 0.0;
     float currentDepth = projCoords.z;
-    // 경사 바이어스 (그림자 여드름 방지)
-    float bias = max(0.005 * (1.0 - dot(normal, lightDir)), 0.0005);
-    // 3×3 PCF
+    // 바닥(수평면)은 bias 최소화해서 선명한 그림자, 수직면은 self-shadow 방지
+    float cosTheta = clamp(dot(normal, lightDir), 0.0, 1.0);
+    float bias = mix(0.0006, 0.0002, cosTheta);
+    // 5×5 PCF - 부드러운 그림자 경계
     float shadow = 0.0;
     vec2 texelSize = 1.0 / vec2(textureSize(uShadowMap, 0));
-    for (int x = -1; x <= 1; ++x) {
-      for (int y = -1; y <= 1; ++y) {
+    for (int x = -2; x <= 2; ++x) {
+      for (int y = -2; y <= 2; ++y) {
         float pcfDepth = texture2D(uShadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
         shadow += currentDepth - bias > pcfDepth ? 1.0 : 0.0;
       }
     }
-    return shadow / 9.0;
+    return shadow / 25.0;
   }
 
   void main() {
@@ -503,9 +496,9 @@ export class Renderer {
     sh.camera.near = 1; sh.camera.far = 300;
     sh.camera.left = -120; sh.camera.right  = 120;
     sh.camera.top  =  120; sh.camera.bottom = -120;
-    sh.bias = -0.0002;
-    sh.normalBias = 0.02;        // 피터팬 현상 방지
-    sh.radius = 3;               // 소프트 그림자 반경
+    sh.bias = -0.0001;           // 쉐이더에서 bias 직접 제어하므로 최소화
+    sh.normalBias = 0.01;
+    sh.radius = 2;
     this.scene.add(this.sunLight);
 
     // 보조광 (하늘빛 반사)
