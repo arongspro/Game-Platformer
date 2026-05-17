@@ -985,6 +985,7 @@ function loop() {
     }
 
     renderer.updateParticles(dt);
+    renderer.updateShaderTime(clock.getElapsedTime());
   }
 
   // Always send position regardless of pointer lock
