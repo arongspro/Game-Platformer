@@ -315,8 +315,7 @@ export class Renderer {
     this.renderer.toneMapping        = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.1;
     this.renderer.setClearColor(0x6699cc);
-    // 물리 기반 조명 활성화
-    this.renderer.physicallyCorrectLights = true;
+    // r155+부터 물리 기반 조명이 기본값 (physicallyCorrectLights 제거됨)
 
     // ── 메인 씬 ──
     this.scene = new THREE.Scene();
