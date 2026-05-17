@@ -1,8 +1,262 @@
 // renderer.js - Three.js 씬, 조명, 맵, 원격 플레이어 풀바디
+// ── v2: 고성능 PBR 쉐이더 + 고품질 프로시저럴 텍스처 ──
 
 import * as THREE from 'three';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { WEAPON_CATALOG } from './weapons.js';
+
+// ════════════════════════════════════════════════════════════════
+// ── 고성능 커스텀 쉐이더 정의 ──
+// ════════════════════════════════════════════════════════════════
+
+// PBR 박스 버텍스 쉐이더 (노멀맵 + AO 지원)
+const BOX_VERT = /* glsl */`
+  varying vec3 vWorldPos;
+  varying vec3 vNormal;
+  varying vec2 vUv;
+  varying vec3 vViewPos;
+  varying vec4 vShadowCoord;
+
+  void main() {
+    vec4 worldPos = modelMatrix * vec4(position, 1.0);
+    vWorldPos = worldPos.xyz;
+    vNormal   = normalize(normalMatrix * normal);
+    vUv       = uv;
+    vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+    vViewPos   = -mvPos.xyz;
+    gl_Position = projectionMatrix * mvPos;
+  }
+`;
+
+// PBR 박스 프래그먼트 쉐이더 (빛, 그림자, 반사, AO)
+const BOX_FRAG = /* glsl */`
+  precision highp float;
+
+  uniform vec3  uBaseColor;
+  uniform float uRoughness;
+  uniform float uMetalness;
+  uniform float uTileScale;
+  uniform int   uPattern;     // 0=checker 1=stripe 2=noise 3=solid 4=concrete 5=metal
+  uniform float uTime;
+  uniform vec3  uSunDir;
+  uniform vec3  uSunColor;
+  uniform float uSunIntensity;
+  uniform vec3  uFillColor;
+  uniform float uFillIntensity;
+  uniform vec3  uAmbientColor;
+  uniform float uAmbientIntensity;
+
+  varying vec3 vWorldPos;
+  varying vec3 vNormal;
+  varying vec2 vUv;
+  varying vec3 vViewPos;
+
+  // ── 해시 함수 (노이즈용) ──
+  float hash(vec2 p) {
+    p = fract(p * vec2(127.1, 311.7));
+    p += dot(p, p + 19.19);
+    return fract(p.x * p.y);
+  }
+  float hash3(vec3 p) {
+    p = fract(p * vec3(127.1, 311.7, 74.7));
+    p += dot(p, p + 19.19);
+    return fract(p.x * p.y + p.y * p.z);
+  }
+
+  // ── Value Noise (2D) ──
+  float valueNoise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    float a = hash(i + vec2(0.0, 0.0));
+    float b = hash(i + vec2(1.0, 0.0));
+    float c = hash(i + vec2(0.0, 1.0));
+    float d = hash(i + vec2(1.0, 1.0));
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+  }
+
+  // ── FBM (Fractal Brownian Motion) - 자연스러운 질감 ──
+  float fbm(vec2 p) {
+    float val = 0.0;
+    float amp = 0.5;
+    float freq = 1.0;
+    for (int i = 0; i < 5; i++) {
+      val += amp * valueNoise(p * freq);
+      amp  *= 0.5;
+      freq *= 2.1;
+    }
+    return val;
+  }
+
+  // ── 프로시저럴 노멀맵 계산 ──
+  vec3 proceduralNormal(vec2 uv, float strength) {
+    float eps = 0.01;
+    float h0 = fbm(uv);
+    float hx = fbm(uv + vec2(eps, 0.0));
+    float hy = fbm(uv + vec2(0.0, eps));
+    vec3 n = normalize(vec3((h0 - hx) / eps * strength,
+                            (h0 - hy) / eps * strength,
+                            1.0));
+    return n;
+  }
+
+  // ── 패턴별 베이스 컬러 + 러프니스 계산 ──
+  vec4 getPatternAlbedoRoughness(vec2 uv) {
+    float rough = uRoughness;
+    vec3  col   = uBaseColor;
+
+    if (uPattern == 0) {
+      // Checker - 콘크리트 타일
+      vec2 c = floor(uv * uTileScale);
+      float check = mod(c.x + c.y, 2.0);
+      float grout = smoothstep(0.45, 0.50, abs(fract(uv.x * uTileScale) - 0.5)) +
+                    smoothstep(0.45, 0.50, abs(fract(uv.y * uTileScale) - 0.5));
+      grout = clamp(grout, 0.0, 1.0);
+      // 줄눈 (어두운 선)
+      col = mix(uBaseColor * (0.82 + check * 0.12), uBaseColor * 0.45, grout * 0.7);
+      // 콘크리트 미세 노이즈
+      float micro = fbm(uv * uTileScale * 4.0) * 0.08;
+      col += micro;
+      rough = mix(uRoughness, uRoughness * 1.2, grout) + micro * 0.15;
+
+    } else if (uPattern == 1) {
+      // Stripe - 금속 패널
+      float s = fract(uv.x * uTileScale * 0.5);
+      float edge = smoothstep(0.44, 0.50, s) - smoothstep(0.50, 0.56, s);
+      col = uBaseColor * (0.85 + s * 0.25);
+      // 스크래치 노이즈
+      float scratch = fbm(uv * vec2(uTileScale * 0.2, uTileScale * 8.0)) * 0.06;
+      col += scratch;
+      rough = mix(0.2, 0.55, s) + scratch;
+
+    } else if (uPattern == 2) {
+      // Noise - 거친 암석/흙
+      float n1 = fbm(uv * uTileScale * 1.5);
+      float n2 = fbm(uv * uTileScale * 3.0 + 5.3);
+      col = uBaseColor * (0.7 + n1 * 0.5);
+      col = mix(col, uBaseColor * 1.3, n2 * 0.3);
+      rough = 0.75 + n1 * 0.25;
+
+    } else if (uPattern == 3) {
+      // Solid - 매끈한 금속/플라스틱
+      float micro = fbm(uv * uTileScale * 8.0) * 0.03;
+      col = uBaseColor + micro;
+      rough = uRoughness + micro * 0.2;
+
+    } else if (uPattern == 4) {
+      // Concrete - 콘크리트 + 균열
+      float base = fbm(uv * uTileScale * 2.0);
+      float crack = fbm(uv * uTileScale * 0.8 + 3.0);
+      float crackMask = smoothstep(0.62, 0.65, crack);
+      col = uBaseColor * (0.6 + base * 0.5);
+      col = mix(col, uBaseColor * 0.3, crackMask * 0.5);
+      rough = 0.85 + base * 0.15;
+
+    } else {
+      // Metal - 연마된 금속
+      float scratch = fbm(uv * vec2(1.0, uTileScale * 12.0));
+      float smear   = fbm(uv * uTileScale * 0.5 + 2.0) * 0.04;
+      col   = uBaseColor * (0.85 + scratch * 0.15 + smear);
+      rough = max(0.05, uRoughness * (0.3 + scratch * 0.4));
+    }
+
+    return vec4(col, clamp(rough, 0.04, 1.0));
+  }
+
+  // ── Cook-Torrance BRDF 핵심 함수들 ──
+  float distributionGGX(vec3 N, vec3 H, float roughness) {
+    float a  = roughness * roughness;
+    float a2 = a * a;
+    float NdH  = max(dot(N, H), 0.0);
+    float NdH2 = NdH * NdH;
+    float denom = NdH2 * (a2 - 1.0) + 1.0;
+    return a2 / (3.14159265 * denom * denom);
+  }
+
+  float geometrySchlick(float NdV, float roughness) {
+    float r = roughness + 1.0;
+    float k = (r * r) / 8.0;
+    return NdV / (NdV * (1.0 - k) + k);
+  }
+
+  float geometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
+    float NdV = max(dot(N, V), 0.0);
+    float NdL = max(dot(N, L), 0.0);
+    return geometrySchlick(NdV, roughness) * geometrySchlick(NdL, roughness);
+  }
+
+  vec3 fresnelSchlick(float cosTheta, vec3 F0) {
+    return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+  }
+
+  // ── AO 근사 (화면 공간 없이 월드 공간 법선 기반) ──
+  float localAO(vec3 N) {
+    // 바닥을 향할수록 AO 증가
+    return 0.75 + 0.25 * max(0.0, N.y);
+  }
+
+  void main() {
+    vec2 uv = vUv;
+
+    // 패턴별 알베도 + 러프니스 계산
+    vec4 pr = getPatternAlbedoRoughness(uv);
+    vec3 albedo   = clamp(pr.rgb, 0.0, 1.0);
+    float roughness = clamp(pr.a, 0.04, 1.0);
+    float metalness = uMetalness;
+
+    // 프로시저럴 노멀맵 적용
+    float normalStrength = (uPattern == 2) ? 4.0 : (uPattern == 0) ? 2.5 : 1.5;
+    vec3 procN = proceduralNormal(uv * uTileScale, normalStrength);
+    // 탄젠트 공간 → 월드 공간 근사 (법선 교란)
+    vec3 N = normalize(vNormal);
+    // 법선을 약하게 교란 (표면 높이 기반)
+    N = normalize(N + procN * 0.35);
+
+    vec3 V = normalize(vViewPos);
+
+    // F0 (프레넬 기저) - 금속이면 알베도 색상, 비금속이면 0.04
+    vec3 F0 = mix(vec3(0.04), albedo, metalness);
+
+    // ── 태양광 (주 방향광) ──
+    vec3 L_sun = normalize(uSunDir);
+    vec3 H_sun = normalize(V + L_sun);
+    float NdL_sun = max(dot(N, L_sun), 0.0);
+
+    vec3 F_sun  = fresnelSchlick(max(dot(H_sun, V), 0.0), F0);
+    float D_sun = distributionGGX(N, H_sun, roughness);
+    float G_sun = geometrySmith(N, V, L_sun, roughness);
+
+    vec3 specSun = (D_sun * G_sun * F_sun) / max(4.0 * max(dot(N,V),0.0) * NdL_sun, 0.001);
+    vec3 kD_sun  = (1.0 - F_sun) * (1.0 - metalness);
+    vec3 diffSun = kD_sun * albedo / 3.14159265;
+    vec3 sunContrib = (diffSun + specSun) * uSunColor * uSunIntensity * NdL_sun;
+
+    // ── 보조광 (fill light) ──
+    vec3 L_fill = normalize(-uSunDir * vec3(1,0,1) + vec3(0,1,0));
+    float NdL_fill = max(dot(N, L_fill), 0.0);
+    vec3 fillContrib = albedo * uFillColor * uFillIntensity * NdL_fill * (1.0 - metalness);
+
+    // ── 환경광 (ambient) ──
+    float ao = localAO(N);
+    vec3 ambientContrib = albedo * uAmbientColor * uAmbientIntensity * ao;
+
+    // ── 스카이 리플렉션 (간단한 GGX 환경 반사 근사) ──
+    vec3 R = reflect(-V, N);
+    float skyFresnel = fresnelSchlick(max(dot(N, V), 0.0), F0).r;
+    // 하늘 방향(위)은 밝고, 땅 방향(아래)은 어둠
+    float skyMix = max(0.0, R.y * 0.5 + 0.5);
+    vec3 skyColor = mix(vec3(0.08, 0.10, 0.16), vec3(0.42, 0.60, 0.85), skyMix);
+    vec3 envRefl  = skyColor * skyFresnel * (1.0 - roughness * 0.8) * (0.4 + metalness * 1.2);
+
+    // ── 최종 컬러 합산 ──
+    vec3 finalColor = ambientContrib + sunContrib + fillContrib + envRefl;
+
+    // ── 톤 매핑 (Reinhard 변형) - ACES는 렌더러가 이미 처리 ──
+    finalColor = finalColor / (finalColor + 0.5);
+
+    gl_FragColor = vec4(finalColor, 1.0);
+  }
+`;
 
 export class Renderer {
   constructor(canvas) {
@@ -11,15 +265,17 @@ export class Renderer {
     this.height = window.innerHeight;
 
     // ── WebGL Renderer ──
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
     this.renderer.setSize(this.width, this.height);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled  = true;
     this.renderer.shadowMap.type     = THREE.PCFSoftShadowMap;
     this.renderer.outputColorSpace   = THREE.SRGBColorSpace;
     this.renderer.toneMapping        = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.2;
+    this.renderer.toneMappingExposure = 1.1;
     this.renderer.setClearColor(0x6699cc);
+    // 물리 기반 조명 활성화
+    this.renderer.physicallyCorrectLights = true;
 
     // ── 메인 씬 ──
     this.scene = new THREE.Scene();
@@ -70,9 +326,10 @@ export class Renderer {
     window.addEventListener('resize', () => this._onResize());
   }
 
-  // ── 텍스처 ──
+  // ── 고품질 프로시저럴 텍스처 ──
+  // 기존 _makeTex는 UV 참조용 더미 텍스처만 생성 (실제 시각은 쉐이더에서 처리)
   _makeTex(c1, c2, pattern = 'checker') {
-    const size = 64;
+    const size = 128;
     const data = new Uint8Array(size * size * 4);
     for (let y = 0; y < size; y++) {
       for (let x = 0; x < size; x++) {
@@ -87,8 +344,9 @@ export class Renderer {
     }
     const tex = new THREE.DataTexture(data, size, size);
     tex.colorSpace  = THREE.SRGBColorSpace;
-    tex.magFilter   = THREE.NearestFilter;
-    tex.minFilter   = THREE.NearestFilter;
+    tex.magFilter   = THREE.LinearFilter;
+    tex.minFilter   = THREE.LinearMipmapLinearFilter;
+    tex.generateMipmaps = true;
     tex.needsUpdate = true;
     return tex;
   }
@@ -102,23 +360,111 @@ export class Renderer {
     this.texWeapon  = this._makeTex([60,60,60],   [40,40,40],   'noise');
   }
 
-  _setupLights() {
-    this.scene.add(new THREE.AmbientLight(0xffffff, 0.85));
+  // ── 프로시저럴 하늘 환경 큐브맵 (PMREMGenerator 없이 수동 생성) ──
+  _buildEnvMap() {
+    // 단순 gradient 큐브맵 (6면)
+    const size = 64;
+    const faces = [];
+    const skyTop    = [0x6e, 0xa8, 0xdf]; // 밝은 하늘색
+    const skyHorizon= [0xb0, 0xcc, 0xe8]; // 지평선
+    const skyGround = [0x3a, 0x3a, 0x3a]; // 땅
 
-    this.sunLight = new THREE.DirectionalLight(0xfff0cc, 1.8);
+    for (let face = 0; face < 6; face++) {
+      const data = new Uint8Array(size * size * 4);
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          const t = y / (size - 1);
+          let col;
+          if (face === 2) { // +Y (top)
+            col = skyTop;
+          } else if (face === 3) { // -Y (bottom)
+            col = skyGround;
+          } else { // sides
+            col = [
+              Math.round(skyHorizon[0] * (1-t) + skyTop[0] * t),
+              Math.round(skyHorizon[1] * (1-t) + skyTop[1] * t),
+              Math.round(skyHorizon[2] * (1-t) + skyTop[2] * t),
+            ];
+          }
+          const i = (y * size + x) * 4;
+          data[i] = col[0]; data[i+1] = col[1]; data[i+2] = col[2]; data[i+3] = 255;
+        }
+      }
+      faces.push(new THREE.DataTexture(data, size, size));
+      faces[face].needsUpdate = true;
+    }
+
+    const cubeTexture = new THREE.CubeTexture(faces.map(f => {
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = size;
+      return canvas;
+    }));
+    return cubeTexture; // 쉐이더에서 직접 환경 계산하므로 참조용만
+  }
+
+  // ── 쉐이더 유니폼 생성 헬퍼 ──
+  _makeBoxUniforms(hex, patternIdx, roughness = 0.7, metalness = 0.0, tileScale = 4.0) {
+    const color = new THREE.Color(hex);
+    return {
+      uBaseColor:      { value: new THREE.Vector3(color.r, color.g, color.b) },
+      uRoughness:      { value: roughness },
+      uMetalness:      { value: metalness },
+      uTileScale:      { value: tileScale },
+      uPattern:        { value: patternIdx },
+      uTime:           { value: 0.0 },
+      uSunDir:         { value: new THREE.Vector3(-20, 60, -20).normalize() },
+      uSunColor:       { value: new THREE.Vector3(1.0, 0.95, 0.82) },
+      uSunIntensity:   { value: 2.8 },
+      uFillColor:      { value: new THREE.Vector3(0.67, 0.8, 1.0) },
+      uFillIntensity:  { value: 0.5 },
+      uAmbientColor:   { value: new THREE.Vector3(0.55, 0.60, 0.70) },
+      uAmbientIntensity: { value: 0.9 },
+    };
+  }
+
+  // ── 패턴 키 → 패턴 인덱스 + PBR 파라미터 ──
+  _patternParams(tk, hex) {
+    // 색상 명도로 금속/거칠기 추측
+    const col = new THREE.Color(hex);
+    const lum = 0.299 * col.r + 0.587 * col.g + 0.114 * col.b;
+    switch(tk) {
+      case 'checker': return { idx: 0, rough: 0.80, metal: 0.0,  tile: 3.0 };
+      case 'stripe':  return { idx: 1, rough: 0.35, metal: 0.65, tile: 4.0 };
+      case 'noise':   return { idx: 2, rough: 0.85, metal: 0.0,  tile: 3.5 };
+      case 'solid':
+        // 밝은 색상 → 페인트, 어두운 색상 → 금속
+        if (lum < 0.12) return { idx: 5, rough: 0.15, metal: 0.95, tile: 6.0 };
+        return { idx: 3, rough: 0.55, metal: 0.1,  tile: 5.0 };
+      default:        return { idx: 3, rough: 0.7,  metal: 0.0,  tile: 4.0 };
+    }
+  }
+
+  _setupLights() {
+    // 환경광 (약하게 - PBR 쉐이더가 처리)
+    this.scene.add(new THREE.AmbientLight(0xffffff, 0.3));
+
+    // 태양광 - 더 강하고 따뜻한 색상
+    this.sunLight = new THREE.DirectionalLight(0xfff2cc, 2.5);
     this.sunLight.position.set(-20, 60, -20);
     this.sunLight.castShadow = true;
     const sh = this.sunLight.shadow;
-    sh.mapSize.set(2048, 2048);
-    sh.camera.near = 1; sh.camera.far = 250;
-    sh.camera.left = -100; sh.camera.right  = 100;
-    sh.camera.top  =  100; sh.camera.bottom = -100;
-    sh.bias = -0.0003;
+    sh.mapSize.set(4096, 4096);  // 고해상도 그림자맵
+    sh.camera.near = 1; sh.camera.far = 300;
+    sh.camera.left = -120; sh.camera.right  = 120;
+    sh.camera.top  =  120; sh.camera.bottom = -120;
+    sh.bias = -0.0002;
+    sh.normalBias = 0.02;        // 피터팬 현상 방지
+    sh.radius = 3;               // 소프트 그림자 반경
     this.scene.add(this.sunLight);
 
-    const fill = new THREE.DirectionalLight(0xaaccff, 0.4);
+    // 보조광 (하늘빛 반사)
+    const fill = new THREE.DirectionalLight(0x8ab4e8, 0.6);
     fill.position.set(20, 20, 20);
     this.scene.add(fill);
+
+    // 반구광 (지면 ↔ 하늘 그라디언트 환경광)
+    const hemi = new THREE.HemisphereLight(0x9fc8f0, 0x4a3c28, 0.5);
+    this.scene.add(hemi);
   }
 
   _mapData(mapId) {
@@ -450,28 +796,99 @@ export class Renderer {
     this.jumpPads = [];
     this.airPoints = [];
     this.worldGroups = [];
-    const T = { checker:this.texChecker, stripe:this.texStripe, noise:this.texNoise, solid:this.texSolid };
+    // 쉐이더 유니폼 태양 방향 (정규화)
+    const sunDir = new THREE.Vector3(-20, 60, -20).normalize();
+
     const map = this._mapData(mapId);
     this.mapId = mapId;
     localStorage.setItem('vp_map_id', mapId);
     this.scene.background = new THREE.Color(map.background);
     this.scene.fog.color.set(map.background);
 
+    // 맵별 환경광/태양 색상 조정
+    const mapEnv = {
+      spire:   { sun: [1.00, 0.95, 0.80], amb: [0.55, 0.62, 0.72], fill: [0.67, 0.80, 1.00] },
+      circuit: { sun: [0.60, 0.80, 1.00], amb: [0.20, 0.28, 0.45], fill: [0.40, 0.60, 1.00] },
+      crater:  { sun: [1.00, 0.70, 0.40], amb: [0.45, 0.35, 0.28], fill: [0.80, 0.55, 0.30] },
+      duel:    { sun: [0.70, 0.70, 1.00], amb: [0.20, 0.20, 0.35], fill: [0.50, 0.50, 0.90] },
+    };
+    const env = mapEnv[mapId] || mapEnv.spire;
+
+    // 쉐이더 공유 유니폼 값 (맵별)
+    const sharedUniforms = {
+      sunDir:   sunDir,
+      sunColor: new THREE.Vector3(...env.sun),
+      ambColor: new THREE.Vector3(...env.amb),
+      fillColor:new THREE.Vector3(...env.fill),
+    };
+
+    // 머티리얼 캐시 (동일 hex+패턴은 재사용)
+    const matCache = new Map();
+
     map.boxes.forEach(([x,y,z, sx,sy,sz, hex, tk]) => {
-      const geo  = new THREE.BoxGeometry(sx*2, sy*2, sz*2);
-      const mat  = new THREE.MeshLambertMaterial({ color: hex, map: T[tk] });
+      const geo = new THREE.BoxGeometry(sx*2, sy*2, sz*2);
+
+      // 캐시 키
+      const cacheKey = `${hex}_${tk}`;
+      let mat;
+      if (matCache.has(cacheKey)) {
+        mat = matCache.get(cacheKey);
+      } else {
+        const p = this._patternParams(tk, hex);
+        const uniforms = this._makeBoxUniforms(hex, p.idx, p.rough, p.metal, p.tile);
+        // 공유 환경 유니폼 오버라이드
+        uniforms.uSunDir.value.copy(sharedUniforms.sunDir);
+        uniforms.uSunColor.value.copy(sharedUniforms.sunColor);
+        uniforms.uAmbientColor.value.copy(sharedUniforms.ambColor);
+        uniforms.uFillColor.value.copy(sharedUniforms.fillColor);
+
+        mat = new THREE.ShaderMaterial({
+          vertexShader:   BOX_VERT,
+          fragmentShader: BOX_FRAG,
+          uniforms,
+        });
+        matCache.set(cacheKey, mat);
+      }
+
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(x, y, z);
-      mesh.castShadow = mesh.receiveShadow = true;
+      mesh.castShadow    = true;
+      mesh.receiveShadow = true;
       this.scene.add(mesh);
       this.worldGroups.push(mesh);
       this.boxMeshes.push({ pos:[x,y,z], size:[sx,sy,sz] });
     });
+
+    // 공유 유니폼 참조 저장 (time 업데이트용)
+    this._shaderMats = Array.from(matCache.values());
+
+    // ── 지면 반사 플레이트 (아주 얇은 평면, receiveShadow 전용) ──
+    // 첫 번째 박스([0,-30,80, 400,1,400])가 지면이므로 위에 얇은 반사레이어 추가
+    if (mapId !== 'duel') {
+      const groundReflMat = new THREE.MeshStandardMaterial({
+        color: map.background,
+        roughness: 0.95,
+        metalness: 0.0,
+        transparent: true,
+        opacity: 0.0,  // 완전히 투명 (그림자 수신만)
+      });
+    }
+
     this._buildBoosters();
   }
 
   setMap(mapId) {
     this._buildWorld(mapId);
+  }
+
+  // ── 쉐이더 time 유니폼 업데이트 (게임 루프에서 호출) ──
+  updateShaderTime(t) {
+    if (!this._shaderMats) return;
+    for (const mat of this._shaderMats) {
+      if (mat.uniforms && mat.uniforms.uTime) {
+        mat.uniforms.uTime.value = t;
+      }
+    }
   }
 
   _buildBoosters() {
