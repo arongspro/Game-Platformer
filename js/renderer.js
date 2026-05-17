@@ -1,5 +1,5 @@
 // renderer.js - Three.js 씬, 조명, 맵, 원격 플레이어 풀바디
-// ── v3: 최적화 + 향상된 그림자 + 볼류메트릭 안개 ──
+// ── v2: 고성능 PBR 쉐이더 + 고품질 프로시저럴 텍스처 ──
 
 import * as THREE from 'three';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
@@ -9,124 +9,213 @@ import { WEAPON_CATALOG } from './weapons.js';
 // ── 고성능 커스텀 쉐이더 정의 ──
 // ════════════════════════════════════════════════════════════════
 
-// ── 버텍스 쉐이더: FragPos, Normal, TexCoords, FragPosLightSpace 전달 ──
+// PBR 박스 버텍스 쉐이더 (노멀맵 + AO + 그림자 좌표 지원)
 const BOX_VERT = /* glsl */`
-  varying vec3 vFragPos;
+  varying vec3 vWorldPos;
   varying vec3 vNormal;
-  varying vec2 vTexCoords;
+  varying vec2 vUv;
+  varying vec3 vViewPos;
   varying vec4 vFragPosLightSpace;
 
-  uniform mat4 lightSpaceMatrix;
+  uniform mat4 uLightSpaceMatrix;
 
   void main() {
-    vec4 worldPos      = modelMatrix * vec4(position, 1.0);
-    vFragPos           = worldPos.xyz;
-    vNormal            = mat3(transpose(inverse(modelMatrix))) * normal;
-    vTexCoords         = uv;
-    vFragPosLightSpace = lightSpaceMatrix * vec4(vFragPos, 1.0);
-    gl_Position        = projectionMatrix * viewMatrix * worldPos;
+    vec4 worldPos = modelMatrix * vec4(position, 1.0);
+    vWorldPos = worldPos.xyz;
+    vNormal   = normalize(normalMatrix * normal);
+    vUv       = uv;
+    vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+    vViewPos   = -mvPos.xyz;
+    vFragPosLightSpace = uLightSpaceMatrix * worldPos;
+    gl_Position = projectionMatrix * mvPos;
   }
 `;
 
-// ── 프래그먼트 쉐이더: PCF 소프트 섀도우 + Blinn-Phong 조명 + 프로시저럴 텍스처 + 안개 ──
+// PBR 박스 프래그먼트 쉐이더 (빛, PCF 그림자, 반사, AO)
 const BOX_FRAG = /* glsl */`
   precision highp float;
 
-  // ── 프로시저럴 텍스처용 유니폼 ──
   uniform vec3  uBaseColor;
   uniform float uRoughness;
+  uniform float uMetalness;
   uniform float uTileScale;
-  uniform int   uPattern;   // 0=checker 1=stripe 2=noise 3=solid 4=concrete 5=metal
+  uniform int   uPattern;
+  uniform float uTime;
+  uniform vec3  uSunDir;
+  uniform vec3  uSunColor;
+  uniform float uSunIntensity;
+  uniform vec3  uFillColor;
+  uniform float uFillIntensity;
+  uniform vec3  uAmbientColor;
+  uniform float uAmbientIntensity;
+  uniform sampler2D uShadowMap;
 
-  // ── 조명 유니폼 ──
-  uniform vec3  uLightPos;   // 월드 공간 광원 위치
-  uniform vec3  uViewPos;    // 카메라 위치
-  uniform vec3  uLightColor; // 광원 색상
-
-  // ── 그림자맵 ──
-  uniform sampler2D shadowMap;
-
-  // ── 안개 유니폼 ──
-  uniform vec3  uFogColor;
-  uniform float uFogDensity;
-
-  varying vec3 vFragPos;
+  varying vec3 vWorldPos;
   varying vec3 vNormal;
-  varying vec2 vTexCoords;
+  varying vec2 vUv;
+  varying vec3 vViewPos;
   varying vec4 vFragPosLightSpace;
 
-  // ────────────────────────────────────────
-  // 프로시저럴 텍스처 헬퍼
-  // ────────────────────────────────────────
+  // ── 해시 함수 (노이즈용) ──
   float hash(vec2 p) {
     p = fract(p * vec2(127.1, 311.7));
     p += dot(p, p + 19.19);
     return fract(p.x * p.y);
   }
-  float valueNoise(vec2 p) {
-    vec2 i = floor(p); vec2 f = fract(p);
-    vec2 u = f * f * (3.0 - 2.0 * f);
-    return mix(mix(hash(i), hash(i+vec2(1,0)), u.x),
-               mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), u.x), u.y);
-  }
-  float fbm(vec2 p) {
-    float v=0.0, a=0.5, f=1.0;
-    for(int i=0;i<5;i++){ v+=a*valueNoise(p*f); a*=0.5; f*=2.1; }
-    return v;
+  float hash3(vec3 p) {
+    p = fract(p * vec3(127.1, 311.7, 74.7));
+    p += dot(p, p + 19.19);
+    return fract(p.x * p.y + p.y * p.z);
   }
 
-  // 패턴별 베이스 컬러 계산 (기존 로직 유지)
-  vec3 getPatternColor(vec2 uv) {
-    vec3 col = uBaseColor;
+  // ── Value Noise (2D) ──
+  float valueNoise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    float a = hash(i + vec2(0.0, 0.0));
+    float b = hash(i + vec2(1.0, 0.0));
+    float c = hash(i + vec2(0.0, 1.0));
+    float d = hash(i + vec2(1.0, 1.0));
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+  }
+
+  // ── FBM (Fractal Brownian Motion) - 자연스러운 질감 ──
+  float fbm(vec2 p) {
+    float val = 0.0;
+    float amp = 0.5;
+    float freq = 1.0;
+    for (int i = 0; i < 5; i++) {
+      val += amp * valueNoise(p * freq);
+      amp  *= 0.5;
+      freq *= 2.1;
+    }
+    return val;
+  }
+
+  // ── 프로시저럴 노멀맵 계산 ──
+  vec3 proceduralNormal(vec2 uv, float strength) {
+    float eps = 0.01;
+    float h0 = fbm(uv);
+    float hx = fbm(uv + vec2(eps, 0.0));
+    float hy = fbm(uv + vec2(0.0, eps));
+    vec3 n = normalize(vec3((h0 - hx) / eps * strength,
+                            (h0 - hy) / eps * strength,
+                            1.0));
+    return n;
+  }
+
+  // ── 패턴별 베이스 컬러 + 러프니스 계산 ──
+  vec4 getPatternAlbedoRoughness(vec2 uv) {
+    float rough = uRoughness;
+    vec3  col   = uBaseColor;
+
     if (uPattern == 0) {
+      // Checker - 콘크리트 타일
       vec2 c = floor(uv * uTileScale);
       float check = mod(c.x + c.y, 2.0);
-      float grout = clamp(
-        smoothstep(0.45,0.50,abs(fract(uv.x*uTileScale)-0.5)) +
-        smoothstep(0.45,0.50,abs(fract(uv.y*uTileScale)-0.5)), 0.0, 1.0);
-      col = mix(uBaseColor*(0.82+check*0.12), uBaseColor*0.45, grout*0.7);
-      col += fbm(uv*uTileScale*4.0)*0.08;
+      float grout = smoothstep(0.45, 0.50, abs(fract(uv.x * uTileScale) - 0.5)) +
+                    smoothstep(0.45, 0.50, abs(fract(uv.y * uTileScale) - 0.5));
+      grout = clamp(grout, 0.0, 1.0);
+      // 줄눈 (어두운 선)
+      col = mix(uBaseColor * (0.82 + check * 0.12), uBaseColor * 0.45, grout * 0.7);
+      // 콘크리트 미세 노이즈
+      float micro = fbm(uv * uTileScale * 4.0) * 0.08;
+      col += micro;
+      rough = mix(uRoughness, uRoughness * 1.2, grout) + micro * 0.15;
+
     } else if (uPattern == 1) {
-      float s = fract(uv.x*uTileScale*0.5);
-      col = uBaseColor*(0.85+s*0.25) + fbm(uv*vec2(uTileScale*0.2,uTileScale*8.0))*0.06;
+      // Stripe - 금속 패널
+      float s = fract(uv.x * uTileScale * 0.5);
+      float edge = smoothstep(0.44, 0.50, s) - smoothstep(0.50, 0.56, s);
+      col = uBaseColor * (0.85 + s * 0.25);
+      // 스크래치 노이즈
+      float scratch = fbm(uv * vec2(uTileScale * 0.2, uTileScale * 8.0)) * 0.06;
+      col += scratch;
+      rough = mix(0.2, 0.55, s) + scratch;
+
     } else if (uPattern == 2) {
-      float n1 = fbm(uv*uTileScale*1.5);
-      float n2 = fbm(uv*uTileScale*3.0+5.3);
-      col = mix(uBaseColor*(0.7+n1*0.5), uBaseColor*1.3, n2*0.3);
+      // Noise - 거친 암석/흙
+      float n1 = fbm(uv * uTileScale * 1.5);
+      float n2 = fbm(uv * uTileScale * 3.0 + 5.3);
+      col = uBaseColor * (0.7 + n1 * 0.5);
+      col = mix(col, uBaseColor * 1.3, n2 * 0.3);
+      rough = 0.75 + n1 * 0.25;
+
     } else if (uPattern == 3) {
-      col = uBaseColor + fbm(uv*uTileScale*8.0)*0.03;
+      // Solid - 매끈한 금속/플라스틱
+      float micro = fbm(uv * uTileScale * 8.0) * 0.03;
+      col = uBaseColor + micro;
+      rough = uRoughness + micro * 0.2;
+
     } else if (uPattern == 4) {
-      float base  = fbm(uv*uTileScale*2.0);
-      float crack = smoothstep(0.62,0.65, fbm(uv*uTileScale*0.8+3.0));
-      col = mix(uBaseColor*(0.6+base*0.5), uBaseColor*0.3, crack*0.5);
+      // Concrete - 콘크리트 + 균열
+      float base = fbm(uv * uTileScale * 2.0);
+      float crack = fbm(uv * uTileScale * 0.8 + 3.0);
+      float crackMask = smoothstep(0.62, 0.65, crack);
+      col = uBaseColor * (0.6 + base * 0.5);
+      col = mix(col, uBaseColor * 0.3, crackMask * 0.5);
+      rough = 0.85 + base * 0.15;
+
     } else {
-      col = uBaseColor*(0.85 + fbm(uv*vec2(1.0,uTileScale*12.0))*0.15);
+      // Metal - 연마된 금속
+      float scratch = fbm(uv * vec2(1.0, uTileScale * 12.0));
+      float smear   = fbm(uv * uTileScale * 0.5 + 2.0) * 0.04;
+      col   = uBaseColor * (0.85 + scratch * 0.15 + smear);
+      rough = max(0.05, uRoughness * (0.3 + scratch * 0.4));
     }
-    return clamp(col, 0.0, 1.0);
+
+    return vec4(col, clamp(rough, 0.04, 1.0));
   }
 
-  // ────────────────────────────────────────
-  // PCF 소프트 섀도우 (3×3 커널)
-  // ────────────────────────────────────────
+  // ── Cook-Torrance BRDF 핵심 함수들 ──
+  float distributionGGX(vec3 N, vec3 H, float roughness) {
+    float a  = roughness * roughness;
+    float a2 = a * a;
+    float NdH  = max(dot(N, H), 0.0);
+    float NdH2 = NdH * NdH;
+    float denom = NdH2 * (a2 - 1.0) + 1.0;
+    return a2 / (3.14159265 * denom * denom);
+  }
+
+  float geometrySchlick(float NdV, float roughness) {
+    float r = roughness + 1.0;
+    float k = (r * r) / 8.0;
+    return NdV / (NdV * (1.0 - k) + k);
+  }
+
+  float geometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
+    float NdV = max(dot(N, V), 0.0);
+    float NdL = max(dot(N, L), 0.0);
+    return geometrySchlick(NdV, roughness) * geometrySchlick(NdL, roughness);
+  }
+
+  vec3 fresnelSchlick(float cosTheta, vec3 F0) {
+    return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+  }
+
+  // ── AO 근사 (화면 공간 없이 월드 공간 법선 기반) ──
+  float localAO(vec3 N) {
+    // 바닥을 향할수록 AO 증가
+    return 0.75 + 0.25 * max(0.0, N.y);
+  }
+
+  // ── PCF 소프트 섀도우 (3×3 커널) ──
   float ShadowCalculation(vec4 fragPosLightSpace, vec3 normal, vec3 lightDir) {
     // NDC → [0,1]
     vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
     projCoords = projCoords * 0.5 + 0.5;
-
-    // 라이트 절두체 밖 → 그림자 없음
+    // 라이트 절두체 밖은 그림자 없음
     if (projCoords.z > 1.0) return 0.0;
-
     float currentDepth = projCoords.z;
-
     // 경사 바이어스 (그림자 여드름 방지)
     float bias = max(0.005 * (1.0 - dot(normal, lightDir)), 0.0005);
-
     // 3×3 PCF
     float shadow = 0.0;
-    vec2 texelSize = 1.0 / vec2(textureSize(shadowMap, 0));
+    vec2 texelSize = 1.0 / vec2(textureSize(uShadowMap, 0));
     for (int x = -1; x <= 1; ++x) {
       for (int y = -1; y <= 1; ++y) {
-        float pcfDepth = texture2D(shadowMap, projCoords.xy + vec2(x,y)*texelSize).r;
+        float pcfDepth = texture2D(uShadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
         shadow += currentDepth - bias > pcfDepth ? 1.0 : 0.0;
       }
     }
@@ -134,35 +223,67 @@ const BOX_FRAG = /* glsl */`
   }
 
   void main() {
-    // 베이스 컬러 (프로시저럴 패턴)
-    vec3 color = getPatternColor(vTexCoords);
+    vec2 uv = vUv;
 
-    vec3 normal   = normalize(vNormal);
-    vec3 lightDir = normalize(uLightPos - vFragPos);
+    // 패턴별 알베도 + 러프니스 계산
+    vec4 pr = getPatternAlbedoRoughness(uv);
+    vec3 albedo   = clamp(pr.rgb, 0.0, 1.0);
+    float roughness = clamp(pr.a, 0.04, 1.0);
+    float metalness = uMetalness;
 
-    // ── 환경광 ──
-    vec3 ambient = 0.3 * color;
+    // 프로시저럴 노멀맵 적용
+    float normalStrength = (uPattern == 2) ? 4.0 : (uPattern == 0) ? 2.5 : 1.5;
+    vec3 procN = proceduralNormal(uv * uTileScale, normalStrength);
+    // 탄젠트 공간 → 월드 공간 근사 (법선 교란)
+    vec3 N = normalize(vNormal);
+    // 법선을 약하게 교란 (표면 높이 기반)
+    N = normalize(N + procN * 0.35);
 
-    // ── 확산광 ──
-    float diff   = max(dot(lightDir, normal), 0.0);
-    vec3 diffuse = diff * color;
+    vec3 V = normalize(vViewPos);
 
-    // ── 반사광 (Blinn-Phong) ──
-    vec3 viewDir = normalize(uViewPos - vFragPos);
-    vec3 halfDir = normalize(lightDir + viewDir);
-    float spec   = pow(max(dot(normal, halfDir), 0.0), 32.0);
-    vec3 specular = 0.5 * spec * uLightColor;
+    // F0 (프레넬 기저) - 금속이면 알베도 색상, 비금속이면 0.04
+    vec3 F0 = mix(vec3(0.04), albedo, metalness);
 
-    // ── PCF 그림자 적용 ──
-    float shadow = ShadowCalculation(vFragPosLightSpace, normal, lightDir);
-    vec3 lighting = ambient + (1.0 - shadow) * (diffuse + specular);
-    vec3 finalColor = lighting * uLightColor;
+    // ── 태양광 (주 방향광) ──
+    vec3 L_sun = normalize(uSunDir);
+    vec3 H_sun = normalize(V + L_sun);
+    float NdL_sun = max(dot(N, L_sun), 0.0);
 
-    // ── 지수 안개 (FogExp2) ──
-    float dist      = length(uViewPos - vFragPos);
-    float fogFactor = exp(-uFogDensity * uFogDensity * dist * dist);
-    fogFactor   = clamp(fogFactor, 0.0, 1.0);
-    finalColor  = mix(uFogColor, finalColor, fogFactor);
+    vec3 F_sun  = fresnelSchlick(max(dot(H_sun, V), 0.0), F0);
+    float D_sun = distributionGGX(N, H_sun, roughness);
+    float G_sun = geometrySmith(N, V, L_sun, roughness);
+
+    vec3 specSun = (D_sun * G_sun * F_sun) / max(4.0 * max(dot(N,V),0.0) * NdL_sun, 0.001);
+    vec3 kD_sun  = (1.0 - F_sun) * (1.0 - metalness);
+    vec3 diffSun = kD_sun * albedo / 3.14159265;
+    vec3 sunContrib = (diffSun + specSun) * uSunColor * uSunIntensity * NdL_sun;
+
+    // ── PCF 그림자: 햇빛을 못 받는 곳에 그림자 적용 ──
+    float shadow = ShadowCalculation(vFragPosLightSpace, N, L_sun);
+    sunContrib *= (1.0 - shadow * 0.75);  // 0.75: 완전 암흑 방지 (ambient가 남아있음)
+
+    // ── 보조광 (fill light) ──
+    vec3 L_fill = normalize(-uSunDir * vec3(1,0,1) + vec3(0,1,0));
+    float NdL_fill = max(dot(N, L_fill), 0.0);
+    vec3 fillContrib = albedo * uFillColor * uFillIntensity * NdL_fill * (1.0 - metalness);
+
+    // ── 환경광 (ambient) ──
+    float ao = localAO(N);
+    vec3 ambientContrib = albedo * uAmbientColor * uAmbientIntensity * ao;
+
+    // ── 스카이 리플렉션 (간단한 GGX 환경 반사 근사) ──
+    vec3 R = reflect(-V, N);
+    float skyFresnel = fresnelSchlick(max(dot(N, V), 0.0), F0).r;
+    // 하늘 방향(위)은 밝고, 땅 방향(아래)은 어둠
+    float skyMix = max(0.0, R.y * 0.5 + 0.5);
+    vec3 skyColor = mix(vec3(0.08, 0.10, 0.16), vec3(0.42, 0.60, 0.85), skyMix);
+    vec3 envRefl  = skyColor * skyFresnel * (1.0 - roughness * 0.8) * (0.4 + metalness * 1.2);
+
+    // ── 최종 컬러 합산 ──
+    vec3 finalColor = ambientContrib + sunContrib + fillContrib + envRefl;
+
+    // ── 톤 매핑 (Reinhard 변형) - ACES는 렌더러가 이미 처리 ──
+    finalColor = finalColor / (finalColor + 0.5);
 
     gl_FragColor = vec4(finalColor, 1.0);
   }
@@ -182,15 +303,14 @@ export class Renderer {
     this.renderer.shadowMap.type     = THREE.PCFSoftShadowMap;
     this.renderer.outputColorSpace   = THREE.SRGBColorSpace;
     this.renderer.toneMapping        = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.15;
+    this.renderer.toneMappingExposure = 1.1;
     this.renderer.setClearColor(0x6699cc);
     // 물리 기반 조명 활성화
     this.renderer.physicallyCorrectLights = true;
 
     // ── 메인 씬 ──
     this.scene = new THREE.Scene();
-    // 지수 안개 (선형 안개보다 자연스러운 대기 효과)
-    this.scene.fog = new THREE.FogExp2(0x6699cc, 0.008);
+    this.scene.fog = new THREE.Fog(0x6699cc, 80, 300);
     this.scene.background = new THREE.Color(0x6699cc);
 
     // ── 카메라 ──
@@ -317,22 +437,21 @@ export class Renderer {
   _makeBoxUniforms(hex, patternIdx, roughness = 0.7, metalness = 0.0, tileScale = 4.0) {
     const color = new THREE.Color(hex);
     return {
-      // 프로시저럴 텍스처
-      uBaseColor:   { value: new THREE.Vector3(color.r, color.g, color.b) },
-      uRoughness:   { value: roughness },
-      uTileScale:   { value: tileScale },
-      uPattern:     { value: patternIdx },
-      // 조명 (Blinn-Phong)
-      uLightPos:    { value: new THREE.Vector3(-20, 60, -20) },
-      uViewPos:     { value: new THREE.Vector3(0, 5, 0) },
-      uLightColor:  { value: new THREE.Vector3(1.0, 0.95, 0.82) },
-      // 그림자맵
-      shadowMap:    { value: null },
-      // 라이트 공간 행렬 (DirectionalLight shadow camera)
-      lightSpaceMatrix: { value: new THREE.Matrix4() },
-      // 안개
-      uFogColor:    { value: new THREE.Vector3(0.48, 0.68, 0.83) },
-      uFogDensity:  { value: 0.006 },
+      uBaseColor:        { value: new THREE.Vector3(color.r, color.g, color.b) },
+      uRoughness:        { value: roughness },
+      uMetalness:        { value: metalness },
+      uTileScale:        { value: tileScale },
+      uPattern:          { value: patternIdx },
+      uTime:             { value: 0.0 },
+      uSunDir:           { value: new THREE.Vector3(-20, 60, -20).normalize() },
+      uSunColor:         { value: new THREE.Vector3(1.0, 0.95, 0.82) },
+      uSunIntensity:     { value: 2.8 },
+      uFillColor:        { value: new THREE.Vector3(0.67, 0.8, 1.0) },
+      uFillIntensity:    { value: 0.5 },
+      uAmbientColor:     { value: new THREE.Vector3(0.55, 0.60, 0.70) },
+      uAmbientIntensity: { value: 0.9 },
+      uShadowMap:        { value: null },
+      uLightSpaceMatrix: { value: new THREE.Matrix4() },
     };
   }
 
@@ -362,15 +481,13 @@ export class Renderer {
     this.sunLight.position.set(-20, 60, -20);
     this.sunLight.castShadow = true;
     const sh = this.sunLight.shadow;
-    // ── 고품질 그림자맵 (카스케이드 없이 단일 고해상도) ──
-    sh.mapSize.set(4096, 4096);
-    sh.camera.near = 0.5;
-    sh.camera.far  = 500;
-    sh.camera.left   = -150; sh.camera.right  = 150;
-    sh.camera.top    =  150; sh.camera.bottom = -150;
-    sh.bias       = -0.0003;   // Peter-pan 현상 최소화
-    sh.normalBias = 0.03;      // 표면 접선 바이어스
-    sh.radius     = 4;         // PCF 소프트 그림자 반경 (4=부드럽게)
+    sh.mapSize.set(4096, 4096);  // 고해상도 그림자맵
+    sh.camera.near = 1; sh.camera.far = 300;
+    sh.camera.left = -120; sh.camera.right  = 120;
+    sh.camera.top  =  120; sh.camera.bottom = -120;
+    sh.bias = -0.0002;
+    sh.normalBias = 0.02;        // 피터팬 현상 방지
+    sh.radius = 3;               // 소프트 그림자 반경
     this.scene.add(this.sunLight);
 
     // 보조광 (하늘빛 반사)
@@ -718,20 +835,8 @@ export class Renderer {
     const map = this._mapData(mapId);
     this.mapId = mapId;
     localStorage.setItem('vp_map_id', mapId);
-
-    // ── 맵별 지수 안개 설정 (FogExp2: 거리에 따라 지수적으로 짙어짐) ──
-    const fogSettings = {
-      spire:   { color: 0x7aaed4, density: 0.006 },   // 밝은 하늘색 안개
-      circuit: { color: 0x080f1c, density: 0.010 },   // 어두운 사이버펑크 안개
-      crater:  { color: 0x6e4a28, density: 0.009 },   // 먼지/열기 황토 안개
-      duel:    { color: 0x080810, density: 0.014 },   // 짙은 어둠 안개
-    };
-    const fogCfg = fogSettings[mapId] || fogSettings.spire;
-    this.scene.fog = new THREE.FogExp2(fogCfg.color, fogCfg.density);
-    this.scene.fog.color.set(fogCfg.color);
-    // 배경색을 안개색과 맞춰 하늘-안개 경계 자연스럽게
-    this.scene.background = new THREE.Color(fogCfg.color);
-    this.renderer.setClearColor(fogCfg.color);
+    this.scene.background = new THREE.Color(map.background);
+    this.scene.fog.color.set(map.background);
 
     // 맵별 환경광/태양 색상 조정
     const mapEnv = {
@@ -750,11 +855,6 @@ export class Renderer {
       fillColor:new THREE.Vector3(...env.fill),
     };
 
-    // 안개 색상을 Vector3로 변환
-    const fogColorHex = fogCfg.color;
-    const fogColorThree = new THREE.Color(fogColorHex);
-    const fogVec = new THREE.Vector3(fogColorThree.r, fogColorThree.g, fogColorThree.b);
-
     // 머티리얼 캐시 (동일 hex+패턴은 재사용)
     const matCache = new Map();
 
@@ -770,10 +870,10 @@ export class Renderer {
         const p = this._patternParams(tk, hex);
         const uniforms = this._makeBoxUniforms(hex, p.idx, p.rough, p.metal, p.tile);
         // 공유 환경 유니폼 오버라이드
-        uniforms.uLightPos.value.copy(sharedUniforms.sunDir).multiplyScalar(80);
-        uniforms.uLightColor.value.copy(sharedUniforms.sunColor);
-        uniforms.uFogColor.value.copy(fogVec);
-        uniforms.uFogDensity.value = fogCfg.density;
+        uniforms.uSunDir.value.copy(sharedUniforms.sunDir);
+        uniforms.uSunColor.value.copy(sharedUniforms.sunColor);
+        uniforms.uAmbientColor.value.copy(sharedUniforms.ambColor);
+        uniforms.uFillColor.value.copy(sharedUniforms.fillColor);
 
         mat = new THREE.ShaderMaterial({
           vertexShader:   BOX_VERT,
@@ -785,10 +885,7 @@ export class Renderer {
 
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(x, y, z);
-      // ── 그림자 최적화: 크고 평평한 지면은 receiveShadow만, 나머지는 cast+receive ──
-      const isFloor = sy <= 0.6 && sx >= 10;   // 얇고 넓은 플랫폼 = 지면
-      const isGiant = sx >= 80 || sz >= 80;    // 거대 지면 베이스
-      mesh.castShadow    = !isGiant;           // 거대 지면은 shadow cast 불필요
+      mesh.castShadow    = true;
       mesh.receiveShadow = true;
       this.scene.add(mesh);
       this.worldGroups.push(mesh);
@@ -817,15 +914,14 @@ export class Renderer {
     this._buildWorld(mapId);
   }
 
-  // ── 매 프레임 쉐이더 유니폼 업데이트 ──
+  // ── 쉐이더 유니폼 업데이트 (게임 루프에서 호출) ──
   updateShaderTime(t) {
     if (!this._shaderMats) return;
 
-    // 그림자맵 텍스처 + 라이트 공간 행렬 (sun light shadow camera)
-    const shadowTex    = this.sunLight?.shadow?.map?.texture ?? null;
+    // 그림자맵 + 라이트 공간 행렬 계산
+    const shadowTex = this.sunLight?.shadow?.map?.texture ?? null;
     const lightSpaceMat = new THREE.Matrix4();
-    if (this.sunLight?.shadow) {
-      // projectionMatrix * viewMatrix of shadow camera
+    if (this.sunLight?.shadow?.camera) {
       lightSpaceMat.multiplyMatrices(
         this.sunLight.shadow.camera.projectionMatrix,
         this.sunLight.shadow.camera.matrixWorldInverse
@@ -834,33 +930,10 @@ export class Renderer {
 
     for (const mat of this._shaderMats) {
       if (!mat.uniforms) continue;
-      // 그림자맵
-      if (mat.uniforms.shadowMap)       mat.uniforms.shadowMap.value       = shadowTex;
-      // 라이트 공간 행렬
-      if (mat.uniforms.lightSpaceMatrix) mat.uniforms.lightSpaceMatrix.value = lightSpaceMat;
-      // 카메라 위치 (viewPos)
-      if (mat.uniforms.uViewPos && this.camera) {
-        mat.uniforms.uViewPos.value.copy(this.camera.position);
-      }
+      if (mat.uniforms.uTime)             mat.uniforms.uTime.value             = t;
+      if (mat.uniforms.uShadowMap)        mat.uniforms.uShadowMap.value        = shadowTex;
+      if (mat.uniforms.uLightSpaceMatrix) mat.uniforms.uLightSpaceMatrix.value = lightSpaceMat;
     }
-  }
-
-  // ── 그림자 카메라를 플레이어 위치에 맞춰 동적 업데이트 ──
-  // 호출: main.js loop() 내에서 renderer.updateShadowCamera(player.pos) 로 사용 가능
-  updateShadowCamera(playerPos) {
-    if (!this.sunLight || !playerPos) return;
-    // 태양빛 방향 유지하며 중심을 플레이어 XZ에 맞춤
-    const target = this.sunLight.target;
-    target.position.set(playerPos.x, 0, playerPos.z);
-    target.updateMatrixWorld();
-    // 그림자 카메라도 같이 이동
-    const offset = new THREE.Vector3(-20, 60, -20).normalize().multiplyScalar(80);
-    this.sunLight.position.set(
-      playerPos.x + offset.x,
-      offset.y,
-      playerPos.z + offset.z
-    );
-    this.sunLight.updateMatrixWorld();
   }
 
   _buildBoosters() {
