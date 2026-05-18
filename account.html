@@ -7,8 +7,8 @@
   <script type="importmap">
   {
     "imports": {
-      "three":             "https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js",
-      "three/":            "https://cdn.jsdelivr.net/npm/three@0.158.0/",
+      "three":  "https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js",
+      "three/": "https://cdn.jsdelivr.net/npm/three@0.158.0/"
     }
   }
   </script>
@@ -553,27 +553,24 @@
 </div>
 
 <script type="module">
-import { initializeApp }            from 'firebase/app';
-import { getDatabase, ref, get, child, update } from 'firebase/database';
-import { getAuth, signInAnonymously } from 'firebase/auth';
+import { API_BASE } from './js/auth.js';
 
-// ── Firebase 설정 (기존 auth.js와 동일하게) ──
-const firebaseConfig = (await import('./js/auth.js')).db.app.options;
-
-// auth.js에서 직접 import
-import { db, auth, ensureAuth, login } from './js/auth.js';
+// ── REST API 헬퍼 ──
+async function apiPost(path, body) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || '요청 실패');
+  return data;
+}
 
 // ── 로그인 체크 ──
 const rawUser = sessionStorage.getItem('vp_user') || localStorage.getItem('vp_user');
 if (!rawUser) { location.href = 'login.html'; }
 let userInfo = JSON.parse(rawUser);
-
-// ── 해시 (auth.js와 동일) ──
-function hashPassword(pw) {
-  let h = 0;
-  for (let i = 0; i < pw.length; i++) { h = ((h << 5) - h) + pw.charCodeAt(i); h |= 0; }
-  return h.toString(16);
-}
 
 // ── UI 초기화 ──
 function renderProfile() {
@@ -598,18 +595,16 @@ function renderStats() {
   }, 100);
 }
 
-// Firebase에서 최신 스탯 로드
+// 서버에서 최신 스탯 로드
 async function loadStats() {
   try {
-    await ensureAuth();
-    const snap = await get(child(ref(db), `users/${userInfo.nickname}`));
-    if (snap.exists()) {
-      const data = snap.val();
+    const res  = await fetch(`${API_BASE}/api/user/${userInfo.nickname}`);
+    const data = await res.json();
+    if (res.ok) {
       userInfo.kills  = data.kills  || 0;
       userInfo.deaths = data.deaths || 0;
       userInfo.rating = data.rating || 0;
       userInfo.pixels = data.pixels || userInfo.pixels;
-      // 세션 업데이트
       const storage = localStorage.getItem('vp_user') ? localStorage : sessionStorage;
       storage.setItem('vp_user', JSON.stringify(userInfo));
       renderStats();
@@ -664,26 +659,11 @@ document.getElementById('btn-change-nick').addEventListener('click', async () =>
 
   setLoading('btn-change-nick', true);
   try {
-    await ensureAuth();
-    // 비밀번호 확인
-    const snap = await get(child(ref(db), `users/${userInfo.nickname}`));
-    if (!snap.exists()) throw new Error('사용자 데이터를 찾을 수 없습니다.');
-    const data = snap.val();
-    if (data.password !== hashPassword(pw)) throw new Error('비밀번호가 틀렸습니다.');
-
-    // 새 닉네임 중복 확인
-    const newSnap = await get(child(ref(db), `users/${newNick}`));
-    if (newSnap.exists()) throw new Error('이미 사용 중인 닉네임입니다.');
-
-    // 기존 데이터 복사 → 새 닉네임으로 저장
-    const newData = { ...data, nickname: newNick };
-    await update(ref(db, `users/${newNick}`), newData);
-    // uid_map 업데이트
-    await update(ref(db, `uid_map/${userInfo.uid}`), { nickname: newNick }).catch(() =>
-      import('firebase/database').then(({ set, ref: r }) =>
-        set(r(db, `uid_map/${userInfo.uid}`), newNick)
-      )
-    );
+    await apiPost('/api/change-nickname', {
+      nickname: userInfo.nickname,
+      password: pw,
+      newNickname: newNick,
+    });
 
     // 세션 업데이트
     userInfo.nickname = newNick;
@@ -713,13 +693,11 @@ document.getElementById('btn-change-pw').addEventListener('click', async () => {
 
   setLoading('btn-change-pw', true);
   try {
-    await ensureAuth();
-    const snap = await get(child(ref(db), `users/${userInfo.nickname}`));
-    if (!snap.exists()) throw new Error('사용자 데이터를 찾을 수 없습니다.');
-    const data = snap.val();
-    if (data.password !== hashPassword(curPw)) throw new Error('현재 비밀번호가 틀렸습니다.');
-
-    await update(ref(db, `users/${userInfo.nickname}`), { password: hashPassword(newPw) });
+    await apiPost('/api/change-password', {
+      nickname:        userInfo.nickname,
+      currentPassword: curPw,
+      newPassword:     newPw,
+    });
     document.getElementById('cur-pw').value  = '';
     document.getElementById('new-pw').value  = '';
     document.getElementById('new-pw2').value = '';
@@ -957,8 +935,7 @@ document.querySelectorAll('.preset-btn').forEach(btn => {
 document.getElementById('btn-save-char').addEventListener('click', async () => {
   setLoading('btn-save-char', true);
   try {
-    await ensureAuth();
-    await update(ref(db, `users/${userInfo.nickname}`), { pixels });
+    await apiPost('/api/save-pixels', { nickname: userInfo.nickname, pixels });
     userInfo.pixels = pixels;
     const storage = localStorage.getItem('vp_user') ? localStorage : sessionStorage;
     storage.setItem('vp_user', JSON.stringify(userInfo));
