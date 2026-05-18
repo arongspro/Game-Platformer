@@ -172,6 +172,8 @@ app.post('/api/save-pixels', (req, res) => {
 });
 
 // ── REST API: 유저 정보 조회 ───────────────────────────────
+app.get('/api/user/ping_check', (_, res) => res.json({ ok: true }));
+
 app.get('/api/user/:nickname', (req, res) => {
   const row = stmtGetUser.get(req.params.nickname);
   if (!row) return res.status(404).json({ error: '없는 유저' });
