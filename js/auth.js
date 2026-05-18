@@ -1,42 +1,24 @@
-// auth.js - Firebase Anonymous Auth + 닉네임/DB 로그인
-// Firebase 규칙: auth != null, auth.uid === $uid 통과를 위해 signInAnonymously() 사용
+// auth.js — Firebase 제거, 자체 REST API 사용
+// 서버의 POST /api/register, POST /api/login 으로 통신
 
-import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import {
-  getDatabase, ref, set, get, child, update
-} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
-import {
-  getAuth, signInAnonymously
-} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+// ── 서버 주소 ─────────────────────────────────────────────
+// 개발: http://localhost:3000
+// 배포: 서버 IP 또는 도메인으로 변경
+export const API_BASE = '';  // 비워두면 현재 도메인 기준 (같은 서버에서 서빙할 때)
 
-const FIREBASE_CONFIG = {
-  apiKey:            "AIzaSyCHXYjHr67AHEj6cfUUn5jxGfKa3c5adYE",
-  authDomain:        "multiplatformer-6db0f.firebaseapp.com",
-  databaseURL:       "https://multiplatformer-6db0f-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId:         "multiplatformer-6db0f",
-  storageBucket:     "multiplatformer-6db0f.firebasestorage.app",
-  messagingSenderId: "74962223394",
-  appId:             "1:74962223394:web:e4ab2a77d480a19474e57b",
-  measurementId:     "G-VDQ9ESN8L5"
-};
-
-const app  = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
-const db   = getDatabase(app);
-const auth = getAuth(app);
-
-// ── 익명 Auth 확보 ──
-// Firebase 규칙에서 auth != null 통과를 위해 반드시 먼저 호출해야 함
-export async function ensureAuth() {
-  if (auth.currentUser) return auth.currentUser;
-  const cred = await signInAnonymously(auth);
-  return cred.user;
+// ── uid 생성 (로그인 시 닉네임 기반으로 결정론적 생성) ────
+// Firebase의 anonymous uid 역할: 닉네임이 곧 식별자
+function makeUid(nickname) {
+  // 간단한 해시로 고정 uid 생성 — 같은 닉네임이면 항상 같은 uid
+  let h = 5381;
+  for (let i = 0; i < nickname.length; i++) {
+    h = ((h << 5) + h) ^ nickname.charCodeAt(i);
+    h |= 0;
+  }
+  return 'u_' + (h >>> 0).toString(16).padStart(8, '0');
 }
 
-export function getCurrentUid() {
-  return auth.currentUser?.uid || null;
-}
-
-// ── 기본 픽셀 캐릭터 ──
+// ── 기본 픽셀 캐릭터 ───────────────────────────────────────
 export const DEFAULT_PIXELS = (() => {
   const grid = [];
   for (let y = 0; y < 16; y++) {
@@ -54,69 +36,43 @@ export const DEFAULT_PIXELS = (() => {
   return grid;
 })();
 
-// ── 비밀번호 해시 ──
-function hashPassword(pw) {
-  let h = 0;
-  for (let i = 0; i < pw.length; i++) { h = ((h << 5) - h) + pw.charCodeAt(i); h |= 0; }
-  return h.toString(16);
-}
-
-// ── 회원가입 ──
+// ── 회원가입 ──────────────────────────────────────────────
 export async function register(nickname, password, pixels) {
-  nickname = nickname.trim();
-  if (!nickname || nickname.length < 2)  throw new Error('닉네임은 2자 이상이어야 합니다.');
-  if (nickname.length > 12)              throw new Error('닉네임은 12자 이하여야 합니다.');
-  if (!/^[a-zA-Z0-9가-힣_\-]+$/.test(nickname)) throw new Error('닉네임에 허용되지 않는 문자가 있습니다.');
-  if (!password || password.length < 4) throw new Error('비밀번호는 4자 이상이어야 합니다.');
-
-  // 익명 Auth 먼저 확보 (auth != null 규칙 통과)
-  const user = await ensureAuth();
-
-  // 닉네임 중복 체크
-  const snap = await get(child(ref(db), `users/${nickname}`));
-  if (snap.exists()) throw new Error('이미 사용 중인 닉네임입니다.');
-
-  // users/$nickname 저장
-  await set(ref(db, `users/${nickname}`), {
-    uid:       user.uid,
-    password:  hashPassword(password),
-    pixels,
-    kills:     0,
-    deaths:    0,
-    rating:    0,
-    createdAt: Date.now(),
+  const res = await fetch(`${API_BASE}/api/register`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ nickname: nickname.trim(), password, pixels }),
   });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || '회원가입 실패');
 
-  // uid → nickname 역매핑 (network.js 에서 auth.uid 기반 경로에 쓸 때 사용)
-  await set(ref(db, `uid_map/${user.uid}`), nickname);
-
-  return { nickname, uid: user.uid, pixels, kills: 0, deaths: 0, rating: 0 };
+  const uid = makeUid(data.nickname);
+  return { ...data, uid };
 }
 
-// ── 로그인 ──
+// ── 로그인 ────────────────────────────────────────────────
 export async function login(nickname, password) {
-  nickname = nickname.trim();
+  const res = await fetch(`${API_BASE}/api/login`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ nickname: nickname.trim(), password }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || '로그인 실패');
 
-  // 익명 Auth 먼저 확보
-  const user = await ensureAuth();
-
-  const snap = await get(child(ref(db), `users/${nickname}`));
-  if (!snap.exists()) throw new Error('존재하지 않는 닉네임입니다.');
-  const data = snap.val();
-  if (data.password !== hashPassword(password)) throw new Error('비밀번호가 틀렸습니다.');
-
-  // uid 갱신 (다른 기기 재로그인 시 uid 달라질 수 있음)
-  await update(ref(db, `users/${nickname}`), { uid: user.uid }).catch(() => {});
-  await set(ref(db, `uid_map/${user.uid}`), nickname).catch(() => {});
-
-  return {
-    nickname,
-    uid:    user.uid,
-    pixels: data.pixels,
-    kills:  data.kills  || 0,
-    deaths: data.deaths || 0,
-    rating: data.rating || 0,
-  };
+  const uid = makeUid(data.nickname);
+  return { ...data, uid };
 }
 
-export { db, app, auth };
+// ── 하위 호환: Firebase에서 쓰던 ensureAuth / getCurrentUid ─
+// network.js 등에서 import 해서 쓰는 경우를 위해 더미로 유지
+export function ensureAuth() {
+  // 더 이상 Firebase anonymous auth 불필요
+  return Promise.resolve({ uid: null });
+}
+export function getCurrentUid() {
+  try {
+    const u = JSON.parse(sessionStorage.getItem('vp_user') || 'null');
+    return u?.uid || null;
+  } catch { return null; }
+}
