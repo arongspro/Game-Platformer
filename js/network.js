@@ -1,35 +1,19 @@
-// network.js - Firebase Realtime Database multiplayer
+// network.js — Firebase Realtime DB 제거, Socket.IO 사용
+// 기존 API (onPlayersUpdate, sendHit, sendChat, 결투 등) 100% 유지
 
-import { initializeApp, getApps }                                                        from 'firebase/app';
-import { getDatabase, ref, set, onValue, remove, onDisconnect, get, child, update, serverTimestamp }
-                                                                                         from 'firebase/database';
-import { getAuth, onAuthStateChanged, signInAnonymously }                                from 'firebase/auth';
+import { API_BASE } from './auth.js';
 
-const FIREBASE_CONFIG = {
-  apiKey:            'AIzaSyCHXYjHr67AHEj6cfUUn5jxGfKa3c5adYE',
-  authDomain:        'multiplatformer-6db0f.firebaseapp.com',
-  databaseURL:       'https://multiplatformer-6db0f-default-rtdb.europe-west1.firebasedatabase.app',
-  projectId:         'multiplatformer-6db0f',
-  storageBucket:     'multiplatformer-6db0f.firebasestorage.app',
-  messagingSenderId: '74962223394',
-  appId:             '1:74962223394:web:e4ab2a77d480a19474e57b',
-};
+// Socket.IO 클라이언트 CDN (서버에서 자동 제공하거나 CDN 사용)
+// 서버가 같은 오리진이면 /socket.io/socket.io.js 로 자동 제공됨
+const SOCKET_URL = API_BASE || window.location.origin;
 
-const fireApp = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
-
-const posToObj = a => Array.isArray(a) ? { x: a[0]??0, y: a[1]??0, z: a[2]??0 } : a;
-const posToArr = o => !o ? [0,0,0] : Array.isArray(o) ? o : [o.x??0, o.y??0, o.z??0];
-const VALID_WEAPONS  = new Set(['rifle','sniper','pistol']);
 const SEND_INTERVAL  = 50;
 const STALE_TIMEOUT  = 10_000;
-const MAX_CHAT_MSGS  = 50;
 
 export class Network {
   constructor(userInfo) {
-    this.db       = getDatabase(fireApp);
-    this.auth     = getAuth(fireApp);
-    this.myUid    = userInfo.uid || this.auth.currentUser?.uid || null;
-    this.myId     = this.myUid;
+    this.myUid    = userInfo.uid;
+    this.myId     = userInfo.uid;
     this.nickname = userInfo.nickname;
     this.pixels   = userInfo.pixels;
 
@@ -37,7 +21,7 @@ export class Network {
     this.myHealth     = 100;
     this.currentMapId = 'spire';
 
-    // Duel system
+    // 결투 상태
     this.duelState     = null;
     this.duelOpponent  = null;
     this.duelRoomId    = null;
@@ -48,6 +32,7 @@ export class Network {
     this.onDuelStart    = null;
     this.onDuelEnd      = null;
     this.onOnlinePlayers= null;
+
     this.roomId       = (localStorage.getItem('vp_room_id')   || 'PUBLIC').toUpperCase();
     this.roomName     = localStorage.getItem('vp_room_name')  || 'PUBLIC';
     this.matchLimit   = Number(localStorage.getItem('vp_match_limit') || 10);
@@ -65,8 +50,8 @@ export class Network {
     this._invincibleDuration = 3000;
     this._targetHp           = {};
     this._lastSend           = 0;
-    this._unsubs             = [];
-    this._chatSince          = 0;
+    this._processedHits      = new Set();
+    this._processedExplosions = new Set();
 
     this.onPlayersUpdate = null;
     this.onHealthUpdate  = null;
@@ -74,218 +59,166 @@ export class Network {
     this.onKill          = null;
     this.onRoomUpdate    = null;
     this.onChat          = null;
-    this.onExplosion     = null;  // (pos, type) => void
+    this.onExplosion     = null;
 
-    if (this.myUid) {
-      this._setupListeners();
-    } else {
-      console.warn('[Network] uid not ready, waiting for auth...');
-      const unsub = onAuthStateChanged(this.auth, user => {
-        unsub();
-        if (user) {
-          this.myUid = this.myId = user.uid;
-          this._setupListeners();
-        } else {
-          signInAnonymously(this.auth)
-            .then(({ user: u }) => { this.myUid = this.myId = u.uid; this._setupListeners(); })
-            .catch(e => console.error('[Network] signInAnonymously failed:', e));
-        }
-      });
-    }
+    this._connect();
   }
 
-  _path(sub) { return `rooms/${this.roomId}/${sub}`; }
+  // ── Socket 연결 ──────────────────────────────────────────
+  _connect() {
+    // socket.io 스크립트가 로드된 후 연결
+    const doConnect = () => {
+      this._socket = window.io(SOCKET_URL, {
+        transports: ['websocket', 'polling'],
+      });
 
-  _setupListeners() {
-    this._clearListeners();
-    // presence는 최초 1회만 등록
-    if (!this._presenceRegistered) {
-      this._presenceRegistered = true;
-      this._registerPresenceInternal();
-    }
-    this._chatSince = Date.now() - 100;
+      this._socket.on('connect', () => {
+        console.log('[Network] 소켓 연결됨:', this._socket.id);
+        this._socket.emit('join', {
+          uid:      this.myUid,
+          nickname: this.nickname,
+          roomId:   this.roomId,
+          pixels:   this.pixels,
+          kills:    this.totalKills,
+          deaths:   this.totalDeaths,
+          rating:   this.rating,
+        });
+      });
 
-    const statePath = this._path('state');
-    const metaPath  = this._path('meta');
-    const chatPath  = this._path('chat');
-    const hitsPath  = `hits/${this.myUid}`;
+      this._socket.on('disconnect', () => {
+        console.warn('[Network] 소켓 끊김');
+      });
 
-    this._ensureRoomMeta();
+      this._socket.on('reconnect', () => {
+        // 재연결 시 자동으로 join 재전송
+        this._socket.emit('join', {
+          uid: this.myUid, nickname: this.nickname,
+          roomId: this.roomId, pixels: this.pixels,
+          kills: this.totalKills, deaths: this.totalDeaths, rating: this.rating,
+        });
+      });
 
-    // Players
-    this._processedExplosions = this._processedExplosions || new Set();
-    this._unsubs.push(onValue(ref(this.db, statePath), snap => {
-      const data = snap.val() || {};
-      const now  = Date.now();
-      const others = {};
-      for (const [uid, info] of Object.entries(data)) {
-        if (uid === this.myUid) continue;
-        if (info.ts && now - info.ts > STALE_TIMEOUT) continue;
-        others[uid] = { ...info, pos: posToArr(info.pos) };
-        if (info.health_reset) this._targetHp[uid] = 100;
+      // ── 플레이어 상태 ─────────────────────────────────
+      this._socket.on('state_update', data => {
+        const now    = Date.now();
+        const others = {};
+        for (const [uid, info] of Object.entries(data || {})) {
+          if (uid === this.myUid) continue;
+          if (info.ts && now - info.ts > STALE_TIMEOUT) continue;
+          others[uid] = { ...info };
+          if (info.health_reset) this._targetHp[uid] = 100;
 
-        // 폭발 이벤트 처리 — lastExplosion.ts 기반으로 중복 방지
-        const e = info.lastExplosion;
-        if (e?.ts && now - e.ts < 3000) {
-          const eKey = `${uid}_${e.ts}`;
-          if (!this._processedExplosions.has(eKey)) {
-            this._processedExplosions.add(eKey);
-            this.onExplosion?.([e.x ?? 0, e.y ?? 0, e.z ?? 0], e.type || 'grenade');
+          const e = info.lastExplosion;
+          if (e?.ts && now - e.ts < 3000) {
+            const eKey = `${uid}_${e.ts}`;
+            if (!this._processedExplosions.has(eKey)) {
+              this._processedExplosions.add(eKey);
+              this.onExplosion?.([e.x ?? 0, e.y ?? 0, e.z ?? 0], e.type || 'grenade');
+            }
           }
         }
-      }
-      this.otherPlayers = others;
-      this.onPlayersUpdate?.(others);
-    }));
-
-    // Room meta
-    this._unsubs.push(onValue(ref(this.db, metaPath), snap => {
-      const m = snap.val() || {};
-      this.roomName   = m.name   || this.roomName;
-      this.matchLimit = Number(m.limit || this.matchLimit || 10);
-      this.roomStatus = m.status || 'waiting';
-      this.roomWinner = m.winner || null;
-      this.roomHost   = m.host   || null;
-      localStorage.setItem('vp_room_id',     this.roomId);
-      localStorage.setItem('vp_room_name',   this.roomName);
-      localStorage.setItem('vp_match_limit', String(this.matchLimit));
-      this.onRoomUpdate?.({
-        id: this.roomId, name: this.roomName, limit: this.matchLimit,
-        status: this.roomStatus, winner: this.roomWinner, host: this.roomHost,
+        this.otherPlayers = others;
+        this.onPlayersUpdate?.(others);
       });
-    }));
 
-    // Incoming hits
-    // Bug fix: onValue fires on every DB change (incl. our own remove()), so the same
-    // hit record appears in multiple snapshots before Firebase confirms deletion.
-    // We track processed hit IDs in a Set to avoid applying damage twice.
-    this._processedHits = new Set();
-    this._unsubs.push(onValue(ref(this.db, hitsPath), snap => {
-      const data = snap.val();
-      if (!data) return;
-      for (const [hitId, h] of Object.entries(data)) {
-        if (this._processedHits.has(hitId)) continue;   // 이미 처리한 히트 무시
-        this._processedHits.add(hitId);
-        const itemRef = ref(this.db, `${hitsPath}/${hitId}`);
-        if ((h.ts || 0) < this._respawnTime || this.isInvincible()) { remove(itemRef); continue; }
-        this.myHealth = Math.max(0, this.myHealth - (h.damage || 15));
-        this.onHealthUpdate?.(this.myHealth);
-        this.onHit?.(h.damage || 15);
-        remove(itemRef);
-      }
-    }));
+      // ── 룸 메타 ───────────────────────────────────────
+      this._socket.on('room_meta', m => {
+        if (!m) return;
+        this.roomName   = m.name   || this.roomName;
+        this.matchLimit = Number(m.limit || this.matchLimit || 10);
+        this.roomStatus = m.status || 'waiting';
+        this.roomWinner = m.winner || null;
+        this.roomHost   = m.host   || null;
+        localStorage.setItem('vp_room_id',     this.roomId);
+        localStorage.setItem('vp_room_name',   this.roomName);
+        localStorage.setItem('vp_match_limit', String(this.matchLimit));
+        this.onRoomUpdate?.({
+          id: this.roomId, name: this.roomName, limit: this.matchLimit,
+          status: this.roomStatus, winner: this.roomWinner, host: this.roomHost,
+        });
+      });
 
-    // Disconnect cleanup
-    onDisconnect(ref(this.db, `players/${this.myUid}`)).remove();
-    onDisconnect(ref(this.db, `${statePath}/${this.myUid}`)).remove();
+      // ── 히트 수신 ─────────────────────────────────────
+      this._socket.on('hits', hitList => {
+        for (const h of hitList || []) {
+          if (this._processedHits.has(h.id)) continue;
+          this._processedHits.add(h.id);
+          if ((h.ts || 0) < this._respawnTime || this.isInvincible()) continue;
+          this.myHealth = Math.max(0, this.myHealth - (h.damage || 15));
+          this.onHealthUpdate?.(this.myHealth);
+          this.onHit?.(h.damage || 15);
+        }
+      });
 
-    // Chat
-    this._unsubs.push(onValue(ref(this.db, chatPath), snap => {
-      if (!this.onChat) return;
-      const data = snap.val() || {};
-      const keys = Object.keys(data).sort();
-      if (keys.length > MAX_CHAT_MSGS)
-        keys.slice(0, keys.length - MAX_CHAT_MSGS)
-            .filter(k => k.startsWith(this.myUid))   // 자기 메시지만 삭제 가능 (Firebase 규칙 준수)
-            .forEach(k => remove(ref(this.db, `${chatPath}/${k}`)).catch(() => {}));
-      Object.values(data)
-        .filter(m => m?.ts > this._chatSince)
-        .sort((a, b) => a.ts - b.ts)
-        .forEach(m => { this._chatSince = Math.max(this._chatSince, m.ts); this.onChat(m); });
-    }));
-  }
+      // ── 채팅 ──────────────────────────────────────────
+      this._socket.on('chat', msg => {
+        this.onChat?.(msg);
+      });
 
-  _clearListeners() {
-    for (const u of this._unsubs || []) { try { u(); } catch (_) {} }
-    this._unsubs = [];
-  }
+      // ── 프레전스 ──────────────────────────────────────
+      this._socket.on('presence_update', players => {
+        this.onOnlinePlayers?.(players.map(p => ({ ...p, isSelf: p.uid === this.myUid })));
+      });
 
-  _roomCode() { return Math.random().toString(36).slice(2, 6).toUpperCase(); }
+      // ── 결투 ──────────────────────────────────────────
+      this._socket.on('duel_request', d => {
+        if (!d || Date.now() - d.ts > 30000) return;
+        if (this.duelState && this.duelState !== 'pending_recv') return;
+        this.duelState    = 'pending_recv';
+        this.duelOpponent = { uid: d.fromUid, nickname: d.fromNick };
+        this.onDuelRequest?.(d.fromUid, d.fromNick);
+      });
 
-  async _ensureRoomMeta() {
-    const r    = ref(this.db, this._path('meta'));
-    const snap = await get(r).catch(() => null);
-    if (snap?.exists()) return;
-    await set(r, {
-      id: this.roomId, name: this.roomName || this.roomId,
-      host: this.myUid, limit: this.matchLimit,
-      status: 'waiting', createdAt: Date.now(), updatedAt: Date.now(),
-    }).catch(() => {});
-  }
+      this._socket.on('duel_response', d => {
+        if (!d) return;
+        if (d.status === 'accepted' && this.duelState === 'pending_sent') {
+          this.duelRoomId = d.roomId;
+          this.duelState  = 'picking';
+          this.onDuelAccepted?.();
+          this._watchDuelRoom(d.roomId);
+        } else if (d.status === 'declined') {
+          this.duelState    = null;
+          this.duelOpponent = null;
+          this.onDuelDeclined?.();
+        }
+      });
 
-  async createRoom(limit = 10) {
-    const id = this._roomCode();
-    await this.joinRoom(id, { name: id, limit, host: this.myUid, status: 'waiting', createdAt: Date.now(), updatedAt: Date.now() });
-    return id;
-  }
+      // heartbeat 30초마다
+      this._heartbeatInterval = setInterval(() => {
+        this._socket?.emit('heartbeat');
+      }, 30000);
+    };
 
-  async quickMatch(limit = 10) {
-    const snap = await get(child(ref(this.db), 'rooms')).catch(() => null);
-    const candidate = Object.values(snap?.val() || {})
-      .map(r => r.meta)
-      .filter(m => m?.id && m.status !== 'ended' && Number(m.limit || limit) === Number(limit))
-      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
-      .find(m => m.id !== this.roomId);
-    return candidate
-      ? this.joinRoom(String(candidate.id).trim().toUpperCase())
-      : this.createRoom(limit);
-  }
-
-  async updateRoomLimit(limit = 10) {
-    this.matchLimit = Number(limit) === 20 ? 20 : 10;
-    localStorage.setItem('vp_match_limit', String(this.matchLimit));
-    await update(ref(this.db, this._path('meta')), {
-      limit: this.matchLimit,
-      status: this.roomStatus === 'ended' ? 'waiting' : this.roomStatus,
-      winner: null, updatedAt: Date.now(),
-    }).catch(() => {});
-  }
-
-  async joinRoom(roomId, meta = null) {
-    const nextRoom = String(roomId || '').trim().toUpperCase();
-    if (!nextRoom) throw new Error('Room code is empty.');
-    remove(ref(this.db, `players/${this.myUid}`)).catch(() => {});
-    remove(ref(this.db, this._path(`state/${this.myUid}`))).catch(() => {});
-    this.roomId = nextRoom;
-    if (meta) {
-      this.roomName   = meta.name || nextRoom;
-      this.matchLimit = Number(meta.limit || this.matchLimit || 10);
-      await set(ref(this.db, this._path('meta')), { id: this.roomId, ...meta, limit: this.matchLimit, updatedAt: Date.now() }).catch(() => {});
+    // socket.io 클라이언트 스크립트 동적 로드
+    if (window.io) {
+      doConnect();
     } else {
-      const snap = await get(child(ref(this.db), this._path('meta'))).catch(() => null);
-      if (!snap?.exists())
-        await set(ref(this.db, this._path('meta')), {
-          id: this.roomId, name: nextRoom, host: this.myUid,
-          limit: this.matchLimit, status: 'waiting', createdAt: Date.now(), updatedAt: Date.now(),
-        }).catch(() => {});
+      const script  = document.createElement('script');
+      script.src    = `${SOCKET_URL}/socket.io/socket.io.js`;
+      script.onload = doConnect;
+      script.onerror = () => {
+        // CDN fallback
+        const s2   = document.createElement('script');
+        s2.src     = 'https://cdn.socket.io/4.7.5/socket.io.min.js';
+        s2.onload  = doConnect;
+        document.head.appendChild(s2);
+      };
+      document.head.appendChild(script);
     }
-    localStorage.setItem('vp_room_id', this.roomId);
-    this._respawnTime = Date.now();
-    this._targetHp    = {};
-    this.otherPlayers = {};
-    this.kills  = 0;
-    this.deaths = 0;
-    this._processedExplosions = new Set();
-    this._setupListeners();
   }
 
+  // ── 위치/상태 전송 ────────────────────────────────────────
   sendUpdate(snapshot) {
-    if (!this.myUid || !this._authReady()) return;
+    if (!this._socket?.connected) return;
     const now = Date.now();
     if (now - this._lastSend < SEND_INTERVAL) return;
     this._lastSend = now;
-    const pos = posToObj(snapshot.pos);
-    set(ref(this.db, `players/${this.myUid}`), { pos, nickname: this.nickname, ts: serverTimestamp() })
-      .catch(e => { if (e.code !== 'PERMISSION_DENIED') console.warn('[Network] sendUpdate/players:', e.message); });
-    set(ref(this.db, this._path(`state/${this.myUid}`)), {
-      pos,
+
+    this._socket.emit('state_update', {
+      uid:         this.myUid,
       nickname:    this.nickname,
       pixels:      this.pixels,
-      kills:       this.kills,
-      deaths:      this.deaths,
-      totalKills:  this.totalKills,
-      totalDeaths: this.totalDeaths,
-      rating:      this.rating,
+      pos:         snapshot.pos,
       yaw:         snapshot.yaw,
       pitch:       snapshot.pitch,
       move_time:   snapshot.move_time,
@@ -300,197 +233,179 @@ export class Network {
       grenades:    snapshot.grenades || [],
       rockets:     snapshot.rockets  || [],
       mapId:       snapshot.mapId   || 'spire',
+      kills:       this.kills,
+      deaths:      this.deaths,
+      totalKills:  this.totalKills,
+      totalDeaths: this.totalDeaths,
+      rating:      this.rating,
       ts:          now,
-    }).catch(e => { if (e.code !== 'PERMISSION_DENIED') console.warn('[Network] sendUpdate/state:', e.message); });
-    update(ref(this.db, this._path('meta')), {
-      updatedAt: now,
-      status: this.roomStatus === 'ended' ? 'ended' : 'playing',
-    }).catch(() => {});
+    });
   }
 
+  // ── 히트 전송 ─────────────────────────────────────────────
   sendHit(targetUid, damage = 15, weaponType = 'rifle') {
-    if (!this.myUid) return;
-    if (!this._authReady()) {
-      // Auth 토큰이 아직 준비되지 않음 — 준비되면 재시도
-      const unsub = onAuthStateChanged(this.auth, user => {
-        unsub();
-        if (user?.uid === this.myUid) this.sendHit(targetUid, damage, weaponType);
-      });
-      return;
-    }
+    if (!this._socket?.connected) return;
+    const VALID_WEAPONS = new Set(['rifle','sniper','pistol']);
     this._targetHp[targetUid] ??= 100;
     this._targetHp[targetUid]  = Math.max(0, this._targetHp[targetUid] - damage);
-    set(ref(this.db, `hits/${targetUid}/${this.myUid}_${Date.now()}`), {
-      damage, weapon: VALID_WEAPONS.has(weaponType) ? weaponType : 'rifle', from: this.myUid, ts: Date.now(),
-    }).catch(e => console.warn('[Network] sendHit failed:', e));
+    this._socket.emit('send_hit', {
+      targetUid,
+      damage,
+      weapon: VALID_WEAPONS.has(weaponType) ? weaponType : 'rifle',
+      from:   this.myUid,
+    });
     if (this._targetHp[targetUid] <= 0) {
       this._targetHp[targetUid] = 100;
       this.confirmKill(targetUid);
     }
   }
 
+  // ── 킬 확정 ───────────────────────────────────────────────
   async confirmKill(targetUid) {
     this.kills++;
     this.totalKills++;
     this.rating += 25;
-    await update(ref(this.db, `users/${this.nickname}`), { kills: this.totalKills, deaths: this.totalDeaths }).catch(() => {});
-    if (this.kills >= this.matchLimit)
-      update(ref(this.db, this._path('meta')), {
-        status: 'ended', winner: this.myUid, endedAt: Date.now(), updatedAt: Date.now(),
-      }).catch(() => {});
+    this._syncStats();
+    if (this.kills >= this.matchLimit) {
+      this._socket?.emit('room_meta_update', {
+        status: 'ended', winner: this.myUid, endedAt: Date.now(),
+      });
+    }
     this.onKill?.(targetUid, this.kills, this.deaths);
   }
 
+  // ── 리스폰 ────────────────────────────────────────────────
   sendRespawn(posArr) {
     const now = Date.now();
     this.myHealth     = 100;
     this._respawnTime = now;
-    this._processedHits = new Set();   // 리스폰 시 처리된 히트 목록 초기화
+    this._processedHits = new Set();
     this.deaths++;
     this.totalDeaths++;
     this.rating = Math.max(0, this.rating - 10);
-    update(ref(this.db, `users/${this.nickname}`), { kills: this.totalKills, deaths: this.totalDeaths }).catch(() => {});
-    remove(ref(this.db, `hits/${this.myUid}`)).catch(() => {});
-    const pos = posToObj(posArr);
-    set(ref(this.db, `players/${this.myUid}`),             { pos, nickname: this.nickname, ts: serverTimestamp() }).catch(() => {});
-    set(ref(this.db, this._path(`state/${this.myUid}`)),   {
-      pos, nickname: this.nickname, pixels: this.pixels,
-      kills: this.kills, deaths: this.deaths, totalKills: this.totalKills,
-      totalDeaths: this.totalDeaths, rating: this.rating, health_reset: true,
-      mapId: this.currentMapId || 'spire', ts: now,
-    }).catch(() => {});
+    this._syncStats();
+
+    this._socket?.emit('state_update', {
+      uid:         this.myUid,
+      nickname:    this.nickname,
+      pixels:      this.pixels,
+      pos:         { x: posArr[0], y: posArr[1], z: posArr[2] },
+      kills:       this.kills,
+      deaths:      this.deaths,
+      totalKills:  this.totalKills,
+      totalDeaths: this.totalDeaths,
+      rating:      this.rating,
+      health_reset: true,
+      mapId:       this.currentMapId || 'spire',
+      ts:          now,
+    });
   }
 
+  // ── 폭발 전송 ─────────────────────────────────────────────
   sendExplosion(posArr, type = 'grenade') {
-    if (!this.myUid || !this._authReady()) return;
-    // 기존 state 경로에 lastExplosion 필드를 update — 별도 경로 불필요
-    update(ref(this.db, this._path(`state/${this.myUid}`)), {
+    if (!this._socket?.connected) return;
+    this._socket.emit('state_update', {
+      uid: this.myUid,
       lastExplosion: { x: posArr[0], y: posArr[1], z: posArr[2], type, ts: Date.now() },
-    }).catch(() => {});
+    });
   }
 
+  // ── 채팅 전송 ─────────────────────────────────────────────
   sendChat(text) {
-    if (!text || !this.myUid) return;
-    if (!this._authReady()) {
-      // Auth 토큰이 아직 준비되지 않음 — 준비되면 재시도 (sendHit과 동일한 패턴)
-      const unsub = onAuthStateChanged(this.auth, user => {
-        unsub();
-        if (user?.uid === this.myUid) this.sendChat(text);
+    if (!text || !this._socket?.connected) return;
+    this._socket.emit('chat', { text });
+  }
+
+  listenChat(cb) { this.onChat = cb; }
+
+  // ── 통계 서버에 저장 ──────────────────────────────────────
+  _syncStats() {
+    this._socket?.emit('update_stats', {
+      nickname: this.nickname,
+      kills:    this.totalKills,
+      deaths:   this.totalDeaths,
+      rating:   this.rating,
+    });
+  }
+
+  // ── 룸 관련 ───────────────────────────────────────────────
+  async createRoom(limit = 10) {
+    const id = Math.random().toString(36).slice(2, 6).toUpperCase();
+    await this.joinRoom(id, { name: id, limit, host: this.myUid, status: 'waiting', createdAt: Date.now() });
+    return id;
+  }
+
+  async quickMatch(limit = 10) {
+    return new Promise(resolve => {
+      this._socket.emit('quick_match', { limit }, ({ roomId }) => {
+        this.joinRoom(roomId).then(() => resolve(roomId));
       });
-      return;
-    }
-    set(ref(this.db, this._path(`chat/${this.myUid}_${Date.now()}`)), {
-      uid: this.myUid, nickname: this.nickname, text: text.slice(0, 80), ts: Date.now(),
-    }).catch(() => {});
+    });
   }
 
-  listenChat(cb)   { this.onChat = cb; }
-  disconnect()     { remove(ref(this.db, `players/${this.myUid}`)).catch(() => {}); remove(ref(this.db, this._path(`state/${this.myUid}`))).catch(() => {}); this._clearListeners(); }
-  isInvincible()   { return Date.now() - this._respawnTime < this._invincibleDuration; }
-  _authReady()     { return !!this.auth.currentUser && this.auth.currentUser.uid === this.myUid; }
-  getPlayerCount() { return Object.keys(this.otherPlayers).length + 1; }
+  async updateRoomLimit(limit = 10) {
+    this.matchLimit = Number(limit) === 20 ? 20 : 10;
+    localStorage.setItem('vp_match_limit', String(this.matchLimit));
+    this._socket?.emit('room_meta_update', {
+      limit: this.matchLimit,
+      status: this.roomStatus === 'ended' ? 'waiting' : this.roomStatus,
+      winner: null,
+    });
+  }
 
-  // ── Presence: 온라인 플레이어 목록 ──
+  async joinRoom(roomId, meta = null) {
+    const nextRoom = String(roomId || '').trim().toUpperCase();
+    if (!nextRoom) throw new Error('Room code is empty.');
+    this.roomId = nextRoom;
+    if (meta) {
+      this.roomName   = meta.name || nextRoom;
+      this.matchLimit = Number(meta.limit || this.matchLimit || 10);
+    }
+    this._respawnTime = Date.now();
+    this._targetHp    = {};
+    this.otherPlayers = {};
+    this.kills  = 0;
+    this.deaths = 0;
+    this._processedExplosions = new Set();
+    localStorage.setItem('vp_room_id', this.roomId);
+    this._socket?.emit('change_room', { newRoomId: nextRoom, meta });
+  }
+
+  // ── 프레전스 ──────────────────────────────────────────────
   registerPresence() {
-    // myUid가 이미 있으면 즉시, 없으면 _setupListeners에서 자동 호출됨
-    if (this.myUid && !this._presenceRegistered) {
-      this._presenceRegistered = true;
-      this._registerPresenceInternal();
-    }
-    // duel requests도 동일하게 처리
-    if (this.myUid && !this._duelListenRegistered) {
-      this._duelListenRegistered = true;
-      this._listenDuelInternal();
-    }
+    // join 시 자동 등록되므로 별도 작업 불필요
+    this.listenDuelRequests();
   }
 
-  _registerPresenceInternal() {
-    if (!this.myUid) return;
-    const presRef = ref(this.db, `presence/${this.myUid}`);
-    set(presRef, { nickname: this.nickname, uid: this.myUid, ts: Date.now() });
-    onDisconnect(presRef).remove();
-    this._presenceInterval = setInterval(() => {
-      set(presRef, { nickname: this.nickname, uid: this.myUid, ts: Date.now() }).catch(() => {});
-    }, 30000);
-    onValue(ref(this.db, 'presence'), snap => {
-      const now = Date.now();
-      const data = snap.val() || {};
-      const players = Object.entries(data)
-        .filter(([uid, info]) => info?.nickname && (now - (info.ts || 0) < 90000))
-        .map(([uid, info]) => ({ uid, nickname: info.nickname, isSelf: uid === this.myUid }));
-      this.onOnlinePlayers?.(players);
-    });
-  }
-
+  // ── 결투 ──────────────────────────────────────────────────
   listenDuelRequests() {
-    if (this.myUid && !this._duelListenRegistered) {
-      this._duelListenRegistered = true;
-      this._listenDuelInternal();
-    }
+    // 소켓 이벤트로 자동 수신 (_connect에서 등록됨)
   }
 
-  _listenDuelInternal() {
-    if (!this.myUid) return;
-    onValue(ref(this.db, `duels/requests/${this.myUid}`), snap => {
-      const d = snap.val();
-      if (!d) return;
-      if (Date.now() - d.ts > 30000) { remove(snap.ref); return; }
-      if (this.duelState && this.duelState !== 'pending_recv') return;
-      this.duelState    = 'pending_recv';
-      this.duelOpponent = { uid: d.fromUid, nickname: d.fromNick };
-      this.onDuelRequest?.(d.fromUid, d.fromNick);
-    });
-    onValue(ref(this.db, `duels/responses/${this.myUid}`), snap => {
-      const d = snap.val();
-      if (!d) return;
-      remove(snap.ref);
-      if (d.status === 'accepted' && this.duelState === 'pending_sent') {
-        this.duelRoomId = d.roomId;
-        this.duelState  = 'picking';
-        this.onDuelAccepted?.();
-        this._startDuelRoom(d.roomId);
-      } else if (d.status === 'declined') {
-        this.duelState    = null;
-        this.duelOpponent = null;
-        this.onDuelDeclined?.();
-      }
-    });
-  }
   sendDuelRequest(targetUid, targetNick) {
-    if (!this.myUid) return;
     this.duelState    = 'pending_sent';
     this.duelOpponent = { uid: targetUid, nickname: targetNick };
-    set(ref(this.db, `duels/requests/${targetUid}`), {
-      fromUid: this.myUid, fromNick: this.nickname, ts: Date.now(),
-    }).catch(() => {});
+    this._socket?.emit('duel_request', { targetUid, fromNick: this.nickname });
   }
 
   acceptDuel() {
     if (!this.duelOpponent) return;
-    const roomId = `DUEL_${Date.now().toString(36).toUpperCase()}`;
-    this.duelRoomId = roomId;
-    this.duelState  = 'picking';
-    remove(ref(this.db, `duels/requests/${this.myUid}`)).catch(() => {});
-    set(ref(this.db, `duels/responses/${this.duelOpponent.uid}`), {
-      status: 'accepted', roomId, ts: Date.now(),
-    }).catch(() => {});
-    this._startDuelRoom(roomId);
+    const toUid = this.duelOpponent.uid;
+    this._socket?.emit('duel_accept', { toUid });
+    // duelRoomId는 duel_response 이벤트에서 받음
   }
 
   declineDuel() {
     if (!this.duelOpponent) return;
-    set(ref(this.db, `duels/responses/${this.duelOpponent.uid}`), {
-      status: 'declined', ts: Date.now(),
-    }).catch(() => {});
-    remove(ref(this.db, `duels/requests/${this.myUid}`)).catch(() => {});
+    this._socket?.emit('duel_decline', { toUid: this.duelOpponent.uid });
     this.duelState    = null;
     this.duelOpponent = null;
   }
 
-  _startDuelRoom(roomId) {
-    // 듀얼룸 메타 감시 — 둘 다 ready 되면 start
-    onValue(ref(this.db, `duels/rooms/${roomId}`), snap => {
-      const d = snap.val();
+  _watchDuelRoom(roomId) {
+    this.duelRoomId = roomId;
+    this._socket?.emit('duel_score_listen', { roomId });
+    this._socket?.on(`duel_room_${roomId}`, d => {
       if (!d) return;
       if (d.status === 'active' && this.duelState === 'picking') {
         this.duelState   = 'active';
@@ -505,47 +420,31 @@ export class Network {
   }
 
   markDuelReady(loadout) {
-    if (!this.duelRoomId || !this.myUid) return;
-    // ready 정보를 직접 update (set 대신)
-    update(ref(this.db, `duels/rooms/${this.duelRoomId}/ready`), {
-      [this.myUid]: { nickname: this.nickname, loadout, ts: Date.now() },
-    }).then(() => get(ref(this.db, `duels/rooms/${this.duelRoomId}/ready`)))
-      .then(snap => {
-        const r = snap.val() || {};
-        if (Object.keys(r).length >= 2) {
-          // 둘 다 ready — 시작
-          update(ref(this.db, `duels/rooms/${this.duelRoomId}`), {
-            status: 'active', startTs: Date.now() + 500,
-          }).catch(() => {});
-        } else {
-          // 첫 번째 ready — room status 초기화
-          update(ref(this.db, `duels/rooms/${this.duelRoomId}`), {
-            status: 'waiting',
-          }).catch(() => {});
-        }
-      }).catch(() => {});
+    if (!this.duelRoomId) return;
+    this._socket?.emit('duel_ready', { roomId: this.duelRoomId, loadout });
+    this._watchDuelRoom(this.duelRoomId);
   }
 
   sendDuelKill(roomId, killerUid, killerNick) {
-    if (!roomId) return;
-    const scoreRef = ref(this.db, `duels/rooms/${roomId}/score/${killerUid}`);
-    get(scoreRef).then(snap => {
-      const cur = snap.val() || 0;
-      set(scoreRef, cur + 1);
-    });
-    update(ref(this.db, `duels/rooms/${roomId}`), { lastKillNick: killerNick });
+    this._socket?.emit('duel_kill', { roomId, killerNick });
   }
 
   endDuel(roomId, winnerNick) {
-    if (!roomId) return;
-    update(ref(this.db, `duels/rooms/${roomId}`), {
-      status: 'ended', winnerNick, endedAt: Date.now(),
-    }).catch(() => {});
+    this._socket?.emit('duel_end', { roomId, winnerNick });
   }
 
   listenDuelScore(roomId, cb) {
-    return onValue(ref(this.db, `duels/rooms/${roomId}/score`), snap => {
-      cb(snap.val() || {});
-    });
+    this._socket?.emit('duel_score_listen', { roomId });
+    this._socket?.on(`duel_room_${roomId}`, d => cb(d?.score || {}));
+    return () => this._socket?.off(`duel_room_${roomId}`);
   }
+
+  // ── 유틸 ──────────────────────────────────────────────────
+  disconnect() {
+    clearInterval(this._heartbeatInterval);
+    this._socket?.disconnect();
+  }
+
+  isInvincible()   { return Date.now() - this._respawnTime < this._invincibleDuration; }
+  getPlayerCount() { return Object.keys(this.otherPlayers).length + 1; }
 }
