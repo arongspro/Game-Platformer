@@ -79,7 +79,7 @@ let _fpsFrames = 0, _fpsAccum = 0, _fpsValue = 0;
 let _pingValue = 0;
 function _measurePing() {
   const start = Date.now();
-  fetch('https://firebasestorage.googleapis.com/favicon.ico', { mode: 'no-cors', cache: 'no-store' })
+  fetch('/api/user/ping_check', { cache: 'no-store' }).catch(() => {})
     .then(() => { _pingValue = Date.now() - start; })
     .catch(() => {});
 }
