@@ -4,7 +4,7 @@
 // ── 서버 주소 ─────────────────────────────────────────────
 // 개발: http://localhost:3000
 // 배포: 서버 IP 또는 도메인으로 변경
-export const API_BASE = 'http://82.70.222.194:3000';  // 비워두면 현재 도메인 기준 (같은 서버에서 서빙할 때)
+export const API_BASE = 'https://lifetime-existing-essentials-adaptation.trycloudflare.com';  // 비워두면 현재 도메인 기준 (같은 서버에서 서빙할 때)
 
 // ── uid 생성 (로그인 시 닉네임 기반으로 결정론적 생성) ────
 // Firebase의 anonymous uid 역할: 닉네임이 곧 식별자
