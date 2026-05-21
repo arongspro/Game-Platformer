@@ -5,7 +5,7 @@ import { API_BASE } from './auth.js';
 
 // Socket.IO 클라이언트 CDN (서버에서 자동 제공하거나 CDN 사용)
 // 서버가 같은 오리진이면 /socket.io/socket.io.js 로 자동 제공됨
-const SOCKET_URL = API_BASE || window.location.origin;
+const SOCKET_URL = 'http://82.70.222.194:3000';
 
 const SEND_INTERVAL  = 10;
 const STALE_TIMEOUT  = 10_000;
