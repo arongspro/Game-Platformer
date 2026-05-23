@@ -161,15 +161,45 @@ function isLocked() {
 }
 
 function onPointerLockChange() {
-  if (isMobile) return; // 모바일은 overlay를 mobileCtrl.activate()에서 처리
-  // 채팅 중이거나 무기 선택 오버레이가 열려있으면 lock-overlay 표시 안 함
-  if (_chatOpen) { lockOverlay.style.display = 'none'; return; }
+  if (isMobile) return;
+
   const roundOverlay = document.getElementById('round-weapon-overlay');
-  if (roundOverlay && roundOverlay.style.display !== 'none') {
+  const roundOpen = roundOverlay && roundOverlay.style.display !== 'none';
+
+  if (isLocked()) {
+    // 락 획득 → 메뉴 숨김
     lockOverlay.style.display = 'none';
     return;
   }
-  lockOverlay.style.display = isLocked() ? 'none' : 'flex';
+
+  // 락 해제됨
+  if (_chatOpen) {
+    // 채팅 중: 메뉴 숨기고 유지
+    lockOverlay.style.display = 'none';
+    return;
+  }
+  if (roundOpen) {
+    // 무기 선택 중: 메뉴 숨기고 유지 (ESC 눌러도 메뉴 안 뜸)
+    lockOverlay.style.display = 'none';
+    return;
+  }
+
+  // 게임 중 ESC로 락이 풀렸다면 즉시 재요청 (메뉴 표시 없이)
+  // 단, 실제로 메뉴를 보려는 경우(lock-overlay가 이미 flex인 경우)는 제외
+  if (lockOverlay.style.display !== 'flex') {
+    // 게임 중 의도치 않은 락 해제 → 재요청
+    setTimeout(() => {
+      if (!isLocked() && !_chatOpen) {
+        const ro = document.getElementById('round-weapon-overlay');
+        if (ro && ro.style.display !== 'none') return; // 무기 선택 중
+        tryLock();
+      }
+    }, 50);
+    return;
+  }
+
+  // lock-overlay가 이미 표시 중인 상태 → 그대로 유지
+  lockOverlay.style.display = 'flex';
 }
 document.addEventListener('pointerlockchange',       onPointerLockChange);
 document.addEventListener('mozpointerlockchange',    onPointerLockChange);
@@ -191,8 +221,8 @@ canvas.addEventListener('contextmenu', e => e.preventDefault());
 
 window.addEventListener('keydown', e => {
   if (e.code === 'KeyR')   player.startReload();
-  // ESC는 게임 중(포인터 잠금 상태)에는 비활성화 — 메뉴 진입 방지
-  if (e.code === 'Escape' && !isLocked()) document.exitPointerLock?.();
+  // ESC: 브라우저가 포인터락을 항상 해제하지만, 게임 중이면 onPointerLockChange에서 즉시 재요청
+  // 채팅 중 ESC는 closeChat()에서 처리하므로 여기서는 아무것도 안 함
   if (e.code === 'Tab') {
     e.preventDefault();
     showScoreboard(true);
@@ -815,6 +845,8 @@ network.onPlayersUpdate = (others) => {
 };
 
 network.onHealthUpdate = (hp) => {
+  // 무기 선택 오버레이 중에는 피격 무시 (위치 초기화 방지)
+  if (_roundWeaponOpen) return;
   if (network.isInvincible()) return;
   if (player.isBandaging) {
     // 붕대 중 피격: player.health 기준으로 데미지를 계산해 적용
@@ -969,7 +1001,7 @@ function loop() {
     if (mobileCtrl._firePressed) player.mouse.left = true;
   }
 
-  player.update(camCtrl, isLocked() ? checkHit : null, dt);
+  player.update(camCtrl, (isLocked() && !_roundWeaponOpen) ? checkHit : null, dt);
   camCtrl.update(player.pos, player.isSliding, player.bobAmp,
                  player.moveTime, player.isJumping, player.currentRoll);
 
@@ -1161,22 +1193,21 @@ renderLoadoutUi();
 // ── 라운드 무기 변경 오버레이 ──
 let _roundWeaponTimer = null;
 let _roundWeaponPickLoadout = null;
+let _roundWeaponOpen = false; // 오버레이 열림 여부
 
 function showRoundWeaponSelect() {
-  // 듀얼 중이면 기존 duelPickPhase 사용, 일반 전투에서만 노출
   if (network.duelState === 'active') return;
 
   const overlay = document.getElementById('round-weapon-overlay');
   if (!overlay) return;
 
-  // 현재 로드아웃 복사
   _roundWeaponPickLoadout = [...player.loadoutIds];
+  _roundWeaponOpen = true;
 
   const grid = document.getElementById('round-weapon-grid');
   if (grid) _renderRoundWeaponGrid(grid);
 
-  // 오버레이를 먼저 표시한 뒤 포인터 락 해제
-  // (onPointerLockChange에서 오버레이 감지해 lock-overlay 표시 차단)
+  // 오버레이 먼저 표시 → exitPointerLock → onPointerLockChange에서 재요청 차단
   overlay.style.display = 'flex';
   lockOverlay.style.display = 'none';
   document.exitPointerLock?.();
@@ -1229,6 +1260,7 @@ function _renderRoundWeaponGrid(grid) {
 
 function _applyRoundWeaponLoadout() {
   clearInterval(_roundWeaponTimer);
+  _roundWeaponOpen = false;
   const overlay = document.getElementById('round-weapon-overlay');
   if (overlay) overlay.style.display = 'none';
   const loadout = normalizeLoadout(_roundWeaponPickLoadout);
@@ -1236,17 +1268,17 @@ function _applyRoundWeaponLoadout() {
   renderLoadoutUi();
   updateHud();
   addKillfeed('⚡ Loadout updated!');
-  // 포인터 락이 이미 걸려있으면 유지, 아니면 재획득
-  if (!isLocked()) tryLock();
+  tryLock();
 }
 
 document.getElementById('round-weapon-confirm')?.addEventListener('click', _applyRoundWeaponLoadout);
 document.getElementById('round-weapon-skip')?.addEventListener('click', () => {
   clearInterval(_roundWeaponTimer);
+  _roundWeaponOpen = false;
   const overlay = document.getElementById('round-weapon-overlay');
   if (overlay) overlay.style.display = 'none';
   addKillfeed('⚡ Loadout kept.');
-  if (!isLocked()) tryLock();
+  tryLock();
 });
 
 // ── Presence 등록 ──
