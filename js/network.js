@@ -5,9 +5,9 @@ import { API_BASE } from './auth.js';
 
 // Socket.IO 클라이언트 CDN (서버에서 자동 제공하거나 CDN 사용)
 // 서버가 같은 오리진이면 /socket.io/socket.io.js 로 자동 제공됨
-const SOCKET_URL = 'https://cassette-unmoral-symptom.ngrok-free.dev';
+const SOCKET_URL = 'https://game-proxy.juhyung1234567910.workers.dev';
 
-const SEND_INTERVAL  = 10;
+const SEND_INTERVAL  = 1;
 const STALE_TIMEOUT  = 10_000;
 
 export class Network {
