@@ -183,6 +183,15 @@ export class Network {
         }
       });
 
+      // 수락한 사람(accepter) 본인도 무기선택창 표시
+      this._socket.on('duel_response_self', d => {
+        if (!d || d.status !== 'accepted') return;
+        this.duelRoomId = d.roomId;
+        this.duelState  = 'picking';
+        this.onDuelAccepted?.();
+        this._watchDuelRoom(d.roomId);
+      });
+
       // heartbeat 30초마다
       this._heartbeatInterval = setInterval(() => {
         this._socket?.emit('heartbeat');
@@ -391,8 +400,9 @@ export class Network {
   acceptDuel() {
     if (!this.duelOpponent) return;
     const toUid = this.duelOpponent.uid;
+    // 수락한 사람도 상태 변경 (서버 응답 전 선제적으로)
+    this.duelState = 'pending_accept';
     this._socket?.emit('duel_accept', { toUid });
-    // duelRoomId는 duel_response 이벤트에서 받음
   }
 
   declineDuel() {
@@ -435,7 +445,7 @@ export class Network {
 
   listenDuelScore(roomId, cb) {
     this._socket?.emit('duel_score_listen', { roomId });
-    this._socket?.on(`duel_room_${roomId}`, d => cb(d?.score || {}));
+    this._socket?.on(`duel_room_${roomId}`, d => cb(d?.score || {}, d));
     return () => this._socket?.off(`duel_room_${roomId}`);
   }
 
