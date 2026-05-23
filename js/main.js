@@ -1311,8 +1311,8 @@ function confirmDuelLoadout() {
 // ── 듀얼 스폰 위치 (점대칭) ──
 function _getDuelSpawn() {
   return network.myUid < network.duelOpponent?.uid
-    ? { pos: [0, 2, 16], facing: Math.PI }   // 남쪽 스폰 → 북쪽 바라봄
-    : { pos: [0, 2, -16], facing: 0 };        // 북쪽 스폰 → 남쪽 바라봄
+    ? { pos: [0, 1, 30], facing: Math.PI }   // 스폰 A (Z+30) → 중앙 바라봄
+    : { pos: [0, 1, -30], facing: 0 };        // 스폰 B (Z-30) → 중앙 바라봄
 }
 
 // ── 보급품 상자 지급 ──
