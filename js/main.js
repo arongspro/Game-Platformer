@@ -172,7 +172,8 @@ canvas.addEventListener('contextmenu', e => e.preventDefault());
 
 window.addEventListener('keydown', e => {
   if (e.code === 'KeyR')   player.startReload();
-  if (e.code === 'Escape') document.exitPointerLock?.();
+  // ESC는 게임 중(포인터 잠금 상태)에는 비활성화 — 메뉴 진입 방지
+  if (e.code === 'Escape' && !isLocked()) document.exitPointerLock?.();
   if (e.code === 'Tab') {
     e.preventDefault();
     showScoreboard(true);
@@ -1148,6 +1149,93 @@ function renderLoadoutUi() {
 if (mapSelectEl) mapSelectEl.value = renderer.mapId;
 renderLoadoutUi();
 
+// ── 라운드 무기 변경 오버레이 ──
+let _roundWeaponTimer = null;
+let _roundWeaponPickLoadout = null;
+
+function showRoundWeaponSelect() {
+  // 듀얼 중이면 기존 duelPickPhase 사용, 일반 전투에서만 노출
+  if (network.duelState === 'active') return;
+
+  const overlay = document.getElementById('round-weapon-overlay');
+  if (!overlay) return;
+
+  // 현재 로드아웃 복사
+  _roundWeaponPickLoadout = [...player.loadoutIds];
+
+  const grid = document.getElementById('round-weapon-grid');
+  if (grid) _renderRoundWeaponGrid(grid);
+
+  overlay.style.display = 'flex';
+  document.exitPointerLock?.();
+
+  // 10초 카운트다운
+  let sec = 10;
+  const timerEl = document.getElementById('round-weapon-timer');
+  if (timerEl) timerEl.textContent = sec;
+  clearInterval(_roundWeaponTimer);
+  _roundWeaponTimer = setInterval(() => {
+    sec--;
+    if (timerEl) timerEl.textContent = sec;
+    if (sec <= 0) {
+      clearInterval(_roundWeaponTimer);
+      _applyRoundWeaponLoadout();
+    }
+  }, 1000);
+}
+
+function _renderRoundWeaponGrid(grid) {
+  grid.innerHTML = '';
+  for (const w of WEAPON_CATALOG) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    const sel = _roundWeaponPickLoadout.includes(w.id);
+    btn.style.cssText = `
+      display:flex; align-items:center; gap:8px; padding:9px 12px;
+      font-family:'Share Tech Mono',monospace; font-size:12px; letter-spacing:1px;
+      color:${sel ? w.color : 'rgba(255,255,255,.6)'};
+      background:${sel ? `rgba(0,0,0,.5)` : 'rgba(0,0,0,.25)'};
+      border:1px solid ${sel ? w.color : 'rgba(255,255,255,.1)'};
+      cursor:pointer; border-radius:4px;
+      box-shadow:${sel ? `0 0 12px ${w.color}44` : 'none'};
+      transition: all .12s;
+    `;
+    btn.innerHTML = `<span style="font-size:16px">${w.icon}</span><span>${w.name}</span>`;
+    btn.addEventListener('click', () => {
+      if (_roundWeaponPickLoadout.includes(w.id)) {
+        if (_roundWeaponPickLoadout.length > 1)
+          _roundWeaponPickLoadout = _roundWeaponPickLoadout.filter(id => id !== w.id);
+      } else {
+        _roundWeaponPickLoadout.push(w.id);
+        if (_roundWeaponPickLoadout.length > 3) _roundWeaponPickLoadout.shift();
+      }
+      _renderRoundWeaponGrid(grid);
+    });
+    grid.appendChild(btn);
+  }
+}
+
+function _applyRoundWeaponLoadout() {
+  clearInterval(_roundWeaponTimer);
+  const overlay = document.getElementById('round-weapon-overlay');
+  if (overlay) overlay.style.display = 'none';
+  const loadout = normalizeLoadout(_roundWeaponPickLoadout);
+  player.setLoadout(loadout);
+  renderLoadoutUi();
+  updateHud();
+  addKillfeed('⚡ Loadout updated!');
+  tryLock();
+}
+
+document.getElementById('round-weapon-confirm')?.addEventListener('click', _applyRoundWeaponLoadout);
+document.getElementById('round-weapon-skip')?.addEventListener('click', () => {
+  clearInterval(_roundWeaponTimer);
+  const overlay = document.getElementById('round-weapon-overlay');
+  if (overlay) overlay.style.display = 'none';
+  addKillfeed('⚡ Loadout kept.');
+  tryLock();
+});
+
 // ── Presence 등록 ──
 network.registerPresence();
 network.listenDuelRequests();
@@ -1442,6 +1530,8 @@ network.onKill = (targetId, kills, deaths) => {
       matchEnded = true;
       addKillfeed(`MATCH WIN · ${matchKillLimit} KILLS`, true);
     }
+    // 매 킬마다 무기 변경 기회 (일반 배틀)
+    showRoundWeaponSelect();
   }
   updateHud();
 };
