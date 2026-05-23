@@ -750,6 +750,14 @@ export class Player {
     const keys = this.keys, mouse = this.mouse;
     this._camCtrlRef = camCtrl; // RPG 발사용 카메라 참조 저장
 
+    // 듀얼 카운트다운 중 이동 잠금
+    if (this._duelFrozen) {
+      this._updateLocalBody(camCtrl);
+      this._updateFirstPersonWeapon(camCtrl);
+      if (this.grenadeSystem) this.grenadeSystem.update(dt);
+      return;
+    }
+
     // ADS
     this.isAiming    = mouse.right && !this.isReloading;
     this.adsProgress += (this.isAiming ? 1 : -1) * 0.1 * scale;
