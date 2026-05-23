@@ -169,13 +169,14 @@ export class Network {
         this.onDuelRequest?.(d.fromUid, d.fromNick);
       });
 
+      // 요청 보낸 사람 — 상대방이 accept 했을 때
       this._socket.on('duel_response', d => {
+        console.log('[DUEL] duel_response received', d, 'state:', this.duelState);
         if (!d) return;
         if (d.status === 'accepted' && this.duelState === 'pending_sent') {
-          this.duelRoomId = d.roomId;
-          this.duelState  = 'picking';
+          this.duelState = 'picking';
+          this._startWatchingRoom(d.roomId);
           this.onDuelAccepted?.();
-          this._watchDuelRoom(d.roomId);
         } else if (d.status === 'declined') {
           this.duelState    = null;
           this.duelOpponent = null;
@@ -183,13 +184,13 @@ export class Network {
         }
       });
 
-      // 수락한 사람(accepter) 본인도 무기선택창 표시
+      // 수락한 사람(accepter) — 서버가 self 이벤트로 roomId 전달
       this._socket.on('duel_response_self', d => {
+        console.log('[DUEL] duel_response_self received', d, 'state:', this.duelState);
         if (!d || d.status !== 'accepted') return;
-        this.duelRoomId = d.roomId;
-        this.duelState  = 'picking';
+        this.duelState = 'picking';
+        this._startWatchingRoom(d.roomId);
         this.onDuelAccepted?.();
-        this._watchDuelRoom(d.roomId);
       });
 
       // heartbeat 30초마다
@@ -398,10 +399,9 @@ export class Network {
   }
 
   acceptDuel() {
+    console.log('[DUEL] acceptDuel called, opponent:', this.duelOpponent, 'state:', this.duelState);
     if (!this.duelOpponent) return;
     const toUid = this.duelOpponent.uid;
-    // 수락한 사람도 상태 변경 (서버 응답 전 선제적으로)
-    this.duelState = 'pending_accept';
     this._socket?.emit('duel_accept', { toUid });
   }
 
@@ -412,17 +412,22 @@ export class Network {
     this.duelOpponent = null;
   }
 
-  _watchDuelRoom(roomId) {
+  // 단일 리스너 — picking 상태 진입 시 한 번만 호출
+  _startWatchingRoom(roomId) {
     this.duelRoomId = roomId;
+    const eventName = `duel_room_${roomId}`;
+    this._socket?.off(eventName);
     this._socket?.emit('duel_score_listen', { roomId });
-    this._socket?.on(`duel_room_${roomId}`, d => {
+    this._duelScoreCb = null;
+    this._socket?.on(eventName, d => {
       if (!d) return;
+      if (this._duelScoreCb) this._duelScoreCb(d.score || {}, d);
       if (d.status === 'active' && this.duelState === 'picking') {
         this.duelState   = 'active';
         this.duelStartTs = d.startTs;
         this.onDuelStart?.(roomId);
       }
-      if (d.status === 'ended') {
+      if (d.status === 'ended' && this.duelState !== 'ended') {
         this.duelState = 'ended';
         this.onDuelEnd?.(d.winnerNick);
       }
@@ -432,7 +437,6 @@ export class Network {
   markDuelReady(loadout) {
     if (!this.duelRoomId) return;
     this._socket?.emit('duel_ready', { roomId: this.duelRoomId, loadout });
-    this._watchDuelRoom(this.duelRoomId);
   }
 
   sendDuelKill(roomId, killerUid, killerNick) {
@@ -444,9 +448,8 @@ export class Network {
   }
 
   listenDuelScore(roomId, cb) {
-    this._socket?.emit('duel_score_listen', { roomId });
-    this._socket?.on(`duel_room_${roomId}`, d => cb(d?.score || {}, d));
-    return () => this._socket?.off(`duel_room_${roomId}`);
+    this._duelScoreCb = cb;
+    return () => { this._duelScoreCb = null; };
   }
 
   // ── 유틸 ──────────────────────────────────────────────────
