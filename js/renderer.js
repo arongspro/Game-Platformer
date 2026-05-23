@@ -305,12 +305,16 @@ export class Renderer {
     this.width  = window.innerWidth;
     this.height = window.innerHeight;
 
+    // ── 기기 성능 감지 ──
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const isLowEnd = navigator.hardwareConcurrency <= 4 || isMobile;
+
     // ── WebGL Renderer ──
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !isMobile, powerPreference: 'high-performance' });
     this.renderer.setSize(this.width, this.height);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.shadowMap.enabled  = true;
-    this.renderer.shadowMap.type     = THREE.PCFSoftShadowMap;
+    this.renderer.setPixelRatio(isMobile ? 1 : Math.min(window.devicePixelRatio, 1.5));
+    this.renderer.shadowMap.enabled  = !isLowEnd;
+    this.renderer.shadowMap.type     = THREE.PCFShadowMap;
     this.renderer.outputColorSpace   = THREE.SRGBColorSpace;
     this.renderer.toneMapping        = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.1;
@@ -319,7 +323,7 @@ export class Renderer {
 
     // ── 메인 씬 ──
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.Fog(0x6699cc, 80, 300);
+    this.scene.fog = new THREE.Fog(0x6699cc, 60, 150);
     this.scene.background = new THREE.Color(0x6699cc);
 
     // ── 카메라 ──
@@ -491,7 +495,7 @@ export class Renderer {
     this.sunLight.position.set(-20, 60, -20);
     this.sunLight.castShadow = true;
     const sh = this.sunLight.shadow;
-    sh.mapSize.set(4096, 4096);  // 고해상도 그림자맵
+    sh.mapSize.set(isLowEnd ? 512 : 1024, isLowEnd ? 512 : 1024);  // 최적화: 저사양 512, 고사양 1024  // 고해상도 그림자맵
     sh.camera.near = 1; sh.camera.far = 300;
     sh.camera.left = -120; sh.camera.right  = 120;
     sh.camera.top  =  120; sh.camera.bottom = -120;
