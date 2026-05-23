@@ -674,28 +674,18 @@
 
     /* ── 온라인 플레이어 사이드 패널 ── */
     #online-side-panel {
-      position: fixed;
-      top: 90px;
-      right: 0;
-      width: 220px;
-      max-height: calc(100vh - 110px);
+      width: 100%;
+      max-width: 420px;
+      max-height: 180px;
       display: flex;
       flex-direction: column;
-      background: rgba(3,8,18,.88);
+      background: rgba(3,8,18,.60);
       border: 1px solid rgba(0,255,224,.18);
-      border-right: none;
-      border-radius: 6px 0 0 6px;
+      border-radius: 6px;
       font-family: 'Share Tech Mono', monospace;
-      z-index: 15;
       pointer-events: auto;
-      backdrop-filter: blur(12px);
-      box-shadow: -4px 0 24px rgba(0,0,0,.4), inset 0 0 0 1px rgba(255,255,255,.03);
       overflow: hidden;
-      transition: transform .25s cubic-bezier(.16,1,.3,1);
-    }
-    /* 1100px 미만이면 숨김 */
-    @media (max-width: 1099px) {
-      #online-side-panel { display: none; }
+      margin-bottom: 8px;
     }
     #online-side-header {
       display: flex;
@@ -895,6 +885,8 @@
       bottom: 90px;
     }
     body.is-mobile #online-side-panel {
+      display: none;
+    }
       display: none; /* 모바일에서 사이드 패널 숨김 */
     }
     body.is-mobile #scoreboard {
@@ -930,16 +922,7 @@
 <div id="scanlines"></div>
 <div id="speed-lines"></div>
 
-<!-- 온라인 플레이어 사이드 패널 -->
-<div id="online-side-panel">
-  <div id="online-side-header">
-    <span class="online-side-title">● ONLINE</span>
-    <span id="online-count">0</span>
-  </div>
-  <div id="online-players-list">
-    <div class="online-empty">NO PLAYERS</div>
-  </div>
-</div>
+<!-- 온라인 플레이어 사이드 패널 (게임 중 숨김 – 메뉴 화면으로 이동) -->
 
 <!-- HUD -->
 <div id="hud">
@@ -1108,6 +1091,17 @@
       <option value="20">20 KILLS</option>
     </select>
   </label>
+  <!-- 온라인 플레이어 목록 (메뉴 화면) -->
+  <div id="online-side-panel">
+    <div id="online-side-header">
+      <span class="online-side-title">● ONLINE</span>
+      <span id="online-count">0</span>
+    </div>
+    <div id="online-players-list">
+      <div class="online-empty">NO PLAYERS</div>
+    </div>
+  </div>
+
   <div id="room-panel">
     <div id="room-info">
       <span id="room-code">ROOM PUBLIC</span>
@@ -1139,6 +1133,19 @@
     Right Click Aim &nbsp;|&nbsp; R Base Reload &nbsp;|&nbsp; TAB Scoreboard<br/><br/>
     1/2/5 Loadout Weapon &nbsp;|&nbsp; 3 Bandage &nbsp;|&nbsp; 4 Grenade
   </p>
+</div>
+
+<!-- 라운드 시작 무기 변경 오버레이 -->
+<div id="round-weapon-overlay" style="display:none; position:fixed; inset:0; z-index:500; background:rgba(0,0,0,.82); backdrop-filter:blur(6px); align-items:center; justify-content:center; flex-direction:column;">
+  <div id="round-weapon-modal" style="background:rgba(5,10,24,.97); border:1px solid rgba(0,255,224,.3); border-radius:12px; padding:28px 32px; min-width:340px; max-width:94vw; font-family:'Share Tech Mono',monospace; box-shadow:0 0 60px rgba(0,255,224,.15);">
+    <div style="font-family:'Orbitron',monospace; font-size:13px; letter-spacing:5px; color:#00ffe0; margin-bottom:6px; text-align:center;">⚡ ROUND OVER</div>
+    <div style="text-align:center; font-size:10px; letter-spacing:3px; opacity:.5; margin-bottom:16px;">CHANGE YOUR LOADOUT? <span id="round-weapon-timer" style="color:#ffcc00; font-size:14px; font-family:'Orbitron',monospace;">10</span>s</div>
+    <div id="round-weapon-grid" style="display:grid; grid-template-columns:repeat(2,1fr); gap:8px; margin-bottom:16px;"></div>
+    <div style="display:flex; gap:10px; margin-top:4px;">
+      <button id="round-weapon-skip" type="button" style="flex:1; padding:10px; font-family:'Share Tech Mono',monospace; font-size:11px; letter-spacing:3px; color:rgba(255,255,255,.45); background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.12); cursor:pointer; border-radius:4px;">KEEP LOADOUT</button>
+      <button id="round-weapon-confirm" type="button" style="flex:1; padding:10px; font-family:'Orbitron',monospace; font-size:11px; letter-spacing:3px; color:#00ffe0; background:rgba(0,255,224,.12); border:1px solid rgba(0,255,224,.35); cursor:pointer; border-radius:4px; box-shadow:0 0 18px rgba(0,255,224,.2);">CONFIRM</button>
+    </div>
+  </div>
 </div>
 
 <!-- 듀얼 요청 오버레이 -->
