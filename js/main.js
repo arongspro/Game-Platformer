@@ -616,11 +616,18 @@ player.onDie = () => {
   deathScreen.classList.add('active');
   setTimeout(() => {
     deathScreen.classList.remove('active');
-    // 죽고 나서 자동으로 포인터락 재획득 시도
     tryLock();
   }, 1500);
-  network.sendRespawn(player.pos.toArray());
-  // health reset은 player.js 내부에서 이미 처리 — 중복 제거
+
+  // 듀얼 중 사망 → 스폰 지점 리스폰 + 보급품
+  if (network.duelState === 'active') {
+    const spawn = _getDuelSpawn();
+    player.pos.set(...spawn.pos);
+    network.sendRespawn(spawn.pos);
+    setTimeout(() => { _grantDuelSupply(); }, 1600);
+  } else {
+    network.sendRespawn(player.pos.toArray());
+  }
   updateHud();
 };
 
@@ -1300,6 +1307,50 @@ function confirmDuelLoadout() {
   addKillfeed('⚔ Loadout locked! Waiting for opponent...');
 }
 
+// ── 듀얼 스폰 위치 (점대칭) ──
+function _getDuelSpawn() {
+  return network.myUid < network.duelOpponent?.uid
+    ? { pos: [0, 2, 16], facing: Math.PI }   // 남쪽 스폰 → 북쪽 바라봄
+    : { pos: [0, 2, -16], facing: 0 };        // 북쪽 스폰 → 남쪽 바라봄
+}
+
+// ── 보급품 상자 지급 ──
+function _grantDuelSupply() {
+  player.health = 100;
+  network.myHealth = 100;
+  player.refillFromCrate();
+  addKillfeed('📦 Supply granted! Full ammo & health!');
+}
+
+// ── 라운드 시작 카운트다운 + 보급 ──
+function _startRoundCountdown(onGo) {
+  // 잠금 상태 (움직이지 못하게)
+  player._duelFrozen = true;
+  _grantDuelSupply();
+  const spawn = _getDuelSpawn();
+  player.pos.set(...spawn.pos);
+  if (player.yaw !== undefined) player.yaw = spawn.facing;
+
+  let count = 3;
+  const flash = (n) => {
+    addKillfeed(n > 0 ? `⚔ ${n}...` : '⚔ GO!', true);
+  };
+  flash(count);
+  const cd = setInterval(() => {
+    count--;
+    if (count <= 0) {
+      clearInterval(cd);
+      flash(0);
+      player._duelFrozen = false;
+      onGo();
+    } else {
+      flash(count);
+    }
+  }, 1000);
+}
+
+const DUEL_WIN_KILLS = 5;  // 먼저 5킬 달성 시 승리
+
 function startDuelMatch(roomId) {
   // 듀얼 맵으로 이동
   renderer.setMap('duel');
@@ -1308,56 +1359,43 @@ function startDuelMatch(roomId) {
   network.currentMapId = 'duel';
   if (mapSelectEl) mapSelectEl.value = 'duel';
 
-  // 스폰: 각자 반대편에
-  const mySpawn = network.myUid < network.duelOpponent?.uid
-    ? [0, 1, 15] : [0, 1, -15];
-  player.pos.set(...mySpawn);
-  player.health = 100;
-  network.myHealth = 100;
-
   // 듀얼 HUD 표시
   const duelHud = document.getElementById('duel-hud');
   if (duelHud) duelHud.style.display = 'flex';
 
-  // 1분 타이머
-  let remaining = 60;
-  const timerEl = document.getElementById('duel-timer');
   const myScoreEl  = document.getElementById('duel-my-score');
   const oppScoreEl = document.getElementById('duel-opp-score');
+  const timerEl    = document.getElementById('duel-timer');
   const oppNameEl  = document.getElementById('duel-opp-name');
+  const myNameEl   = document.getElementById('duel-my-name');
   if (oppNameEl) oppNameEl.textContent = network.duelOpponent?.nickname || '?';
-  const myNameEl = document.getElementById('duel-my-name');
-  if (myNameEl) myNameEl.textContent = network.nickname || 'ME';
+  if (myNameEl)  myNameEl.textContent  = network.nickname || 'ME';
+  if (timerEl)   timerEl.textContent   = `0 : 0`;
 
-  duelTimerInterval = setInterval(() => {
-    remaining--;
-    if (timerEl) timerEl.textContent = remaining;
-    if (remaining <= 0) {
-      clearInterval(duelTimerInterval);
-      // 점수 기반 승자 결정
-      if (duelScoreUnsub) duelScoreUnsub();
-    }
-  }, 1000);
+  // 라운드 카운트다운 후 시작
+  _startRoundCountdown(() => {
+    addKillfeed(`⚔ DUEL STARTED! First to ${DUEL_WIN_KILLS} kills wins!`, true);
+  });
 
-  // 점수 실시간 구독
-  duelScoreUnsub = network.listenDuelScore(roomId, (score) => {
+  // 점수 실시간 구독 — 5킬 달성 감지
+  duelScoreUnsub = network.listenDuelScore(roomId, (score, roomData) => {
     const myKills  = score[network.myUid]  || 0;
     const oppKills = score[network.duelOpponent?.uid] || 0;
     if (myScoreEl)  myScoreEl.textContent  = myKills;
     if (oppScoreEl) oppScoreEl.textContent = oppKills;
-    // 타임오버 후 승자 판정 트리거
-    if (remaining <= 0) {
-      const winnerNick = myKills >= oppKills ? network.nickname : network.duelOpponent?.nickname;
-      network.endDuel(roomId, winnerNick);
+    if (timerEl)    timerEl.textContent    = `${myKills} : ${oppKills}`;
+
+    // 서버가 ended 상태로 바꿨을 경우 처리
+    if (roomData && roomData.status === 'ended') {
+      // onDuelEnd 콜백으로 처리됨
     }
   });
-
-  addKillfeed('⚔ DUEL STARTED! 60 seconds!', true);
 }
 
 function endDuelMatch(winnerNick) {
   clearInterval(duelTimerInterval);
   if (duelScoreUnsub) duelScoreUnsub();
+  player._duelFrozen = false;
 
   const duelHud = document.getElementById('duel-hud');
   if (duelHud) duelHud.style.display = 'none';
