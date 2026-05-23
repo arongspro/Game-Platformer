@@ -1170,6 +1170,7 @@ network.onDuelRequest = (fromUid, fromNick) => {
 };
 
 network.onDuelAccepted = () => {
+  console.log('[DUEL] onDuelAccepted fired');
   hideDuelRequest();
   showDuelPickPhase();
 };
