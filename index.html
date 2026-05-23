@@ -675,17 +675,16 @@
     /* ── 온라인 플레이어 사이드 패널 ── */
     #online-side-panel {
       width: 100%;
-      max-width: 420px;
-      max-height: 180px;
+      max-height: 160px;
       display: flex;
       flex-direction: column;
-      background: rgba(3,8,18,.60);
-      border: 1px solid rgba(0,255,224,.18);
-      border-radius: 6px;
+      background: rgba(3,8,18,.50);
+      border: 1px solid rgba(0,255,224,.15);
+      border-radius: 4px;
       font-family: 'Share Tech Mono', monospace;
       pointer-events: auto;
       overflow: hidden;
-      margin-bottom: 8px;
+      margin-top: 8px;
     }
     #online-side-header {
       display: flex;
@@ -1091,16 +1090,6 @@
       <option value="20">20 KILLS</option>
     </select>
   </label>
-  <!-- 온라인 플레이어 목록 (메뉴 화면) -->
-  <div id="online-side-panel">
-    <div id="online-side-header">
-      <span class="online-side-title">● ONLINE</span>
-      <span id="online-count">0</span>
-    </div>
-    <div id="online-players-list">
-      <div class="online-empty">NO PLAYERS</div>
-    </div>
-  </div>
 
   <div id="room-panel">
     <div id="room-info">
@@ -1121,6 +1110,16 @@
         <option value="crater">CRATER RUN</option>
         <option value="duel">DUEL ARENA</option>
       </select>
+    </div>
+    <!-- 온라인 플레이어 목록 (MAP 아래) -->
+    <div id="online-side-panel">
+      <div id="online-side-header">
+        <span class="online-side-title">● ONLINE</span>
+        <span id="online-count">0</span>
+      </div>
+      <div id="online-players-list">
+        <div class="online-empty">NO PLAYERS</div>
+      </div>
     </div>
     <div class="config-block">
       <div class="config-title"><span>LOADOUT</span><span>3 / 10</span></div>
