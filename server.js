@@ -378,11 +378,15 @@ io.on('connection', socket => {
 
   socket.on('duel_accept', ({ toUid }) => {
     const roomId = `DUEL_${Date.now().toString(36).toUpperCase()}`;
-    duels.responses[toUid] = { status: 'accepted', roomId, ts: Date.now() };
+    const payload = { status: 'accepted', roomId, ts: Date.now() };
+    duels.responses[toUid] = payload;
     delete duels.requests[myUid];
+    // 요청한 사람(toUid)에게 전송
     const toSid = uidToSocket[toUid];
-    if (toSid) io.to(toSid).emit('duel_response', duels.responses[toUid]);
-    duels.rooms[roomId] = { status: 'waiting', ready: {}, score: {} };
+    if (toSid) io.to(toSid).emit('duel_response', payload);
+    // 수락한 사람(myUid) 본인에게도 전송 — 무기선택창 표시 용도
+    socket.emit('duel_response_self', payload);
+    duels.rooms[roomId] = { status: 'waiting', ready: {}, score: {}, rounds: {}, round: 1 };
   });
 
   socket.on('duel_decline', ({ toUid }) => {
@@ -408,6 +412,13 @@ io.on('connection', socket => {
     if (!duels.rooms[roomId]) return;
     duels.rooms[roomId].score[myUid] = (duels.rooms[roomId].score[myUid] || 0) + 1;
     duels.rooms[roomId].lastKillNick = killerNick;
+    // 5킬 달성 시 즉시 종료
+    const myScore = duels.rooms[roomId].score[myUid];
+    if (myScore >= 5) {
+      duels.rooms[roomId].status     = 'ended';
+      duels.rooms[roomId].winnerNick = killerNick;
+      duels.rooms[roomId].endedAt    = Date.now();
+    }
     io.emit(`duel_room_${roomId}`, duels.rooms[roomId]);
   });
 
