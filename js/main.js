@@ -138,6 +138,20 @@ lockBtn.addEventListener('click', e => { e.preventDefault(); tryLock(); });
 // lockOverlay 자체 클릭은 게임 진입 안 함 — 버튼(#lock-btn)만 진입
 document.getElementById('room-panel')?.addEventListener('click', e => e.stopPropagation());
 document.getElementById('match-limit-wrap')?.addEventListener('click', e => e.stopPropagation());
+document.getElementById('match-config')?.addEventListener('click', e => e.stopPropagation());
+// online-side-panel: stopPropagation으로 포인터 락 트리거 방지
+// 1v1 버튼은 동적으로 생성되므로 이벤트 위임 방식으로 처리
+document.getElementById('online-side-panel')?.addEventListener('click', e => {
+  e.stopPropagation();
+  const btn = e.target.closest('.duel-challenge-btn');
+  if (!btn) return;
+  const uid  = btn.dataset.uid;
+  const nick = btn.dataset.nick;
+  if (!uid) return;
+  if (network.duelState) { addKillfeed('Already in a duel!'); return; }
+  network.sendDuelRequest(uid, nick);
+  addKillfeed(`⚔ Challenge sent to ${nick}...`);
+});
 
 function isLocked() {
   if (isMobile) return mobileCtrl._active;
@@ -1303,13 +1317,8 @@ function updateOnlinePlayersList(players) {
     } else {
       row.innerHTML = `
         <span class="online-nick">${escapeHtml(p.nickname)}</span>
-        <button class="duel-challenge-btn" data-uid="${p.uid}" data-nick="${escapeHtml(p.nickname)}" type="button">⚔</button>
+        <button class="duel-challenge-btn" data-uid="${p.uid}" data-nick="${escapeHtml(p.nickname)}" type="button">⚔ 1v1</button>
       `;
-      row.querySelector('.duel-challenge-btn').addEventListener('click', () => {
-        if (network.duelState) { addKillfeed('Already in a duel!'); return; }
-        network.sendDuelRequest(p.uid, p.nickname);
-        addKillfeed(`⚔ Challenge sent to ${p.nickname}...`);
-      });
     }
     list.appendChild(row);
   }
