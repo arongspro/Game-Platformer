@@ -169,14 +169,22 @@ function onPointerLockChange() {
     return;
   }
 
-  // 락 해제 — 절대 lock-overlay 표시 안 함
+  // 락 해제됨
   lockOverlay.style.display = 'none';
 
   // 무기선택/채팅 중이면 아무것도 안 함
   if (_roundWeaponOpen || _chatOpen) return;
 
-  // 게임 중 ESC로 락 해제 → 클릭 안내 배너
-  _showClickToResume();
+  // 배틀 중(룸 참가 & 매치 미종료)이면 ESC 눌러도 즉시 재요청 → 메뉴 못 나감
+  if (network.roomId && !matchEnded) {
+    setTimeout(() => {
+      if (!isLocked() && !_roundWeaponOpen && !_chatOpen) tryLock();
+    }, 30);
+    return;
+  }
+
+  // 배틀 중이 아닐 때만 메뉴 표시
+  lockOverlay.style.display = 'flex';
 }
 
 // ── 클릭하면 포인터락 재진입 배너 ──
