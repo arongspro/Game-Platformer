@@ -708,14 +708,15 @@ player.onDie = () => {
   setTimeout(() => deathScreen.classList.remove('active'), 1500);
 
   if (network.duelState === 'active') {
-    const spawn = _getDuelSpawn();
-    player.pos.set(...spawn.pos);
-    network.sendRespawn(spawn.pos);
-    setTimeout(() => { _grantDuelSupply(); }, 1600);
+    // 듀얼 모드: 죽은 쪽은 카운트다운 후 리스폰 (위치 재설정 + 보급은 _startRoundCountdown에서 처리)
+    _startRoundCountdown(() => {
+      const spawn = _getDuelSpawn();
+      network.sendRespawn(spawn.pos);
+    });
     showRoundWeaponSelect();
   } else {
+    // 일반 모드: 리스폰만, 무기 선택창 없음
     network.sendRespawn([0, 1, 5]);
-    showRoundWeaponSelect();
   }
   updateHud();
 };
@@ -1324,8 +1325,9 @@ document.getElementById('round-weapon-skip')?.addEventListener('click', () => {
 network.registerPresence();
 network.listenDuelRequests();
 
-// 상대방이 킬하고 보낸 라운드 오버 신호 수신 → 나도 무기 선택
+// 상대방이 킬하고 보낸 라운드 오버 신호 수신 → 듀얼 모드에서만 무기 선택
 network.onRoundOver = () => {
+  if (network.duelState !== 'active') return; // 듀얼 모드가 아니면 무시
   if (_roundWeaponOpen) return; // 이미 열려있으면 중복 방지
   showRoundWeaponSelect();
 };
@@ -1608,20 +1610,25 @@ network.onKill = (targetId, kills, deaths) => {
   const targetNick = network.otherPlayers[targetId]?.nickname || targetId.slice(-4);
   addKillfeed(`☠️ ${network.nickname} → ${targetNick}`, true);
   if (network.duelState === 'active' && network.duelRoomId) {
+    // 듀얼 모드: 킬 점수 전송, 승리자도 위치 재설정 + 카운트다운
     network.sendDuelKill(network.duelRoomId, network.myUid, network.nickname);
+    _startRoundCountdown(() => {
+      const spawn = _getDuelSpawn();
+      network.sendRespawn(spawn.pos);
+    });
     showRoundWeaponSelect();
   } else {
+    // 일반 모드: 무기 선택창 없음
     if (kills >= matchKillLimit && !matchEnded) {
       matchEnded = true;
       addKillfeed(`MATCH WIN · ${matchKillLimit} KILLS`, true);
     }
-    // 킬한 사람 위치 초기화 (올바른 프로퍼티명 사용)
+    // 킬한 사람 위치 초기화
     player.pos.set(0, 1, 5);
     player.yVel = 0;
     player.isSliding = false;
     player.slideSpeed = 0;
     network.sendRoundOver?.();
-    showRoundWeaponSelect();
   }
   updateHud();
 };
