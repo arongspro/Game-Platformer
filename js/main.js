@@ -160,6 +160,12 @@ function isLocked() {
          document.webkitPointerLockElement === canvas;
 }
 
+function _isInBattle() {
+  // 듀얼 중이거나, 룸에 다른 플레이어가 있는 경우
+  return network.duelState === 'active' ||
+         Object.keys(network.otherPlayers).length > 0;
+}
+
 function onPointerLockChange() {
   if (isMobile) return;
 
@@ -174,8 +180,8 @@ function onPointerLockChange() {
     return;
   }
 
-  // 배틀 중이면 "BACK TO GAME" 버튼만 있는 심플 화면
-  if (network.roomId && !matchEnded) {
+  // 배틀 중(상대방 있거나 듀얼 중)이면 BACK TO GAME만
+  if (_isInBattle() && !matchEnded) {
     _showBattleOverlay();
     return;
   }
@@ -1229,8 +1235,7 @@ let _roundWeaponPickLoadout = null;
 let _roundWeaponOpen = false; // 오버레이 열림 여부
 
 function showRoundWeaponSelect() {
-  if (network.duelState === 'active') return;
-
+  // 이미 열려있으면 타이머만 리셋
   const overlay = document.getElementById('round-weapon-overlay');
   if (!overlay) return;
 
@@ -1243,10 +1248,8 @@ function showRoundWeaponSelect() {
   overlay.style.display = 'flex';
   lockOverlay.style.display = 'none';
   _hideBattleOverlay();
-  // 포인터락 해제 → 버튼 클릭 가능 (onPointerLockChange에서 _roundWeaponOpen 체크로 재요청 차단)
   document.exitPointerLock?.();
 
-  // 10초 카운트다운
   let sec = 10;
   const timerEl = document.getElementById('round-weapon-timer');
   if (timerEl) timerEl.textContent = sec;
@@ -1323,7 +1326,6 @@ network.listenDuelRequests();
 
 // 상대방이 킬하고 보낸 라운드 오버 신호 수신 → 나도 무기 선택
 network.onRoundOver = () => {
-  if (network.duelState === 'active') return; // 듀얼 중은 별도 처리
   if (_roundWeaponOpen) return; // 이미 열려있으면 중복 방지
   showRoundWeaponSelect();
 };
