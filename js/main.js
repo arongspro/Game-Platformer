@@ -134,7 +134,7 @@ function tryLock() {
   if (fn) fn.call(canvas);
 }
 
-lockBtn.addEventListener('click', e => { e.preventDefault(); tryLock(); });
+lockBtn.addEventListener('click', e => { e.preventDefault(); _hideClickToResume(); tryLock(); });
 // lockOverlay 자체 클릭은 게임 진입 안 함 — 버튼(#lock-btn)만 진입
 document.getElementById('room-panel')?.addEventListener('click', e => e.stopPropagation());
 document.getElementById('match-limit-wrap')?.addEventListener('click', e => e.stopPropagation());
@@ -163,43 +163,45 @@ function isLocked() {
 function onPointerLockChange() {
   if (isMobile) return;
 
-  const roundOverlay = document.getElementById('round-weapon-overlay');
-  const roundOpen = roundOverlay && roundOverlay.style.display !== 'none';
-
   if (isLocked()) {
-    // 락 획득 → 메뉴 숨김
     lockOverlay.style.display = 'none';
+    _hideClickToResume();
     return;
   }
 
-  // 락 해제됨
-  if (_chatOpen) {
-    // 채팅 중: 메뉴 숨기고 유지
-    lockOverlay.style.display = 'none';
-    return;
-  }
-  if (roundOpen) {
-    // 무기 선택 중: 메뉴 숨기고 유지 (ESC 눌러도 메뉴 안 뜸)
-    lockOverlay.style.display = 'none';
-    return;
-  }
+  // 락 해제 — 절대 lock-overlay 표시 안 함
+  lockOverlay.style.display = 'none';
 
-  // 게임 중 ESC로 락이 풀렸다면 즉시 재요청 (메뉴 표시 없이)
-  // 단, 실제로 메뉴를 보려는 경우(lock-overlay가 이미 flex인 경우)는 제외
-  if (lockOverlay.style.display !== 'flex') {
-    // 게임 중 의도치 않은 락 해제 → 재요청
-    setTimeout(() => {
-      if (!isLocked() && !_chatOpen) {
-        const ro = document.getElementById('round-weapon-overlay');
-        if (ro && ro.style.display !== 'none') return; // 무기 선택 중
-        tryLock();
-      }
-    }, 50);
-    return;
-  }
+  // 무기선택/채팅 중이면 아무것도 안 함
+  if (_roundWeaponOpen || _chatOpen) return;
 
-  // lock-overlay가 이미 표시 중인 상태 → 그대로 유지
-  lockOverlay.style.display = 'flex';
+  // 게임 중 ESC로 락 해제 → 클릭 안내 배너
+  _showClickToResume();
+}
+
+// ── 클릭하면 포인터락 재진입 배너 ──
+let _resumeBanner = null;
+function _showClickToResume() {
+  if (_resumeBanner) return;
+  _resumeBanner = document.createElement('div');
+  _resumeBanner.id = 'click-resume-banner';
+  _resumeBanner.style.cssText = `
+    position:fixed; inset:0; z-index:800; display:flex;
+    align-items:center; justify-content:center;
+    background:rgba(0,0,0,0.45); cursor:pointer;
+    font-family:'Orbitron',monospace; font-size:18px;
+    letter-spacing:4px; color:#00ffe0;
+    text-shadow:0 0 20px #00ffe0;
+  `;
+  _resumeBanner.textContent = '[ CLICK TO RESUME ]';
+  _resumeBanner.addEventListener('click', () => {
+    _hideClickToResume();
+    tryLock();
+  });
+  document.body.appendChild(_resumeBanner);
+}
+function _hideClickToResume() {
+  if (_resumeBanner) { _resumeBanner.remove(); _resumeBanner = null; }
 }
 document.addEventListener('pointerlockchange',       onPointerLockChange);
 document.addEventListener('mozpointerlockchange',    onPointerLockChange);
@@ -664,19 +666,20 @@ player.onShoot     = () => {
 player.onHudUpdate = updateHud;
 player.onDie = () => {
   deathScreen.classList.add('active');
-  setTimeout(() => {
-    deathScreen.classList.remove('active');
-    tryLock();
-  }, 1500);
+  setTimeout(() => deathScreen.classList.remove('active'), 1500);
 
-  // 듀얼 중 사망 → 스폰 지점 리스폰 + 보급품
   if (network.duelState === 'active') {
     const spawn = _getDuelSpawn();
     player.pos.set(...spawn.pos);
     network.sendRespawn(spawn.pos);
-    setTimeout(() => { _grantDuelSupply(); }, 1600);
+    setTimeout(() => { _grantDuelSupply(); tryLock(); }, 1600);
   } else {
-    network.sendRespawn(player.pos.toArray());
+    // 스폰 위치로 리셋 후 리스폰 전송
+    player.pos.set(0, 1, 5);
+    player.vel?.set(0, 0, 0);
+    network.sendRespawn([0, 1, 5]);
+    // 무기 선택 오버레이 (죽은 사람도)
+    showRoundWeaponSelect();
   }
   updateHud();
 };
@@ -1268,6 +1271,7 @@ function _applyRoundWeaponLoadout() {
   renderLoadoutUi();
   updateHud();
   addKillfeed('⚡ Loadout updated!');
+  _hideClickToResume();
   tryLock();
 }
 
@@ -1278,12 +1282,20 @@ document.getElementById('round-weapon-skip')?.addEventListener('click', () => {
   const overlay = document.getElementById('round-weapon-overlay');
   if (overlay) overlay.style.display = 'none';
   addKillfeed('⚡ Loadout kept.');
+  _hideClickToResume();
   tryLock();
 });
 
 // ── Presence 등록 ──
 network.registerPresence();
 network.listenDuelRequests();
+
+// 상대방이 킬하고 보낸 라운드 오버 신호 수신 → 나도 무기 선택
+network.onRoundOver = () => {
+  if (network.duelState === 'active') return; // 듀얼 중은 별도 처리
+  if (_roundWeaponOpen) return; // 이미 열려있으면 중복 방지
+  showRoundWeaponSelect();
+};
 
 // 커스텀 이벤트 브릿지 (index.html 인라인 스크립트에서 발생)
 window.addEventListener('duel-accept',  () => network.acceptDuel());
@@ -1569,7 +1581,12 @@ network.onKill = (targetId, kills, deaths) => {
       matchEnded = true;
       addKillfeed(`MATCH WIN · ${matchKillLimit} KILLS`, true);
     }
-    // 매 킬마다 무기 변경 기회 (일반 배틀)
+    // 킬한 사람도 스폰 위치로 이동
+    player.pos.set(0, 1, 5);
+    player.vel?.set(0, 0, 0);
+    // 상대(죽은 사람)에게 라운드 오버 신호 전파
+    network.sendRoundOver?.();
+    // 나도 무기 선택 오버레이
     showRoundWeaponSelect();
   }
   updateHud();
