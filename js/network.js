@@ -57,6 +57,7 @@ export class Network {
     this.onHealthUpdate  = null;
     this.onHit           = null;
     this.onKill          = null;
+    this.onRoundOver     = null; // 라운드 오버 (킬한 측이 broadcast → 양쪽 수신)
     this.onRoomUpdate    = null;
     this.onChat          = null;
     this.onExplosion     = null;
@@ -107,6 +108,16 @@ export class Network {
           if (info.ts && now - info.ts > STALE_TIMEOUT) continue;
           others[uid] = { ...info };
           if (info.health_reset) this._targetHp[uid] = 100;
+
+          // 라운드 오버 신호 수신 (상대가 킬하고 브로드캐스트)
+          if (info.round_over && info.round_over_ts && !this._processedRoundOver) {
+            const key = `round_${info.round_over_ts}`;
+            if (!this._seenRoundOver) this._seenRoundOver = new Set();
+            if (!this._seenRoundOver.has(key)) {
+              this._seenRoundOver.add(key);
+              this.onRoundOver?.();
+            }
+          }
 
           const e = info.lastExplosion;
           if (e?.ts && now - e.ts < 3000) {
@@ -308,6 +319,18 @@ export class Network {
       health_reset: true,
       mapId:       this.currentMapId || 'spire',
       ts:          now,
+    });
+  }
+
+  // ── 라운드 오버 브로드캐스트 ──────────────────────────────
+  sendRoundOver() {
+    if (!this._socket?.connected) return;
+    const ts = Date.now();
+    this._socket.emit('state_update', {
+      uid: this.myUid,
+      round_over: true,
+      round_over_ts: ts,
+      ts,
     });
   }
 
