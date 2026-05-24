@@ -191,9 +191,9 @@ function _showBattleOverlay() {
   if (_battleOverlay) return;
   _battleOverlay = document.createElement('div');
   _battleOverlay.style.cssText = `
-    position:fixed; inset:0; z-index:800; display:flex;
+    position:fixed; inset:0; z-index:9000; display:flex;
     align-items:center; justify-content:center;
-    background:rgba(0,0,0,0.7); backdrop-filter:blur(4px);
+    background:rgba(0,0,0,0.92); backdrop-filter:blur(6px);
   `;
   const btn = document.createElement('button');
   btn.type = 'button';
@@ -707,11 +707,8 @@ player.onDie = () => {
     network.sendRespawn(spawn.pos);
     setTimeout(() => { _grantDuelSupply(); tryLock(); }, 1600);
   } else {
-    // 스폰 위치로 리셋 후 리스폰 전송
-    player.pos.set(0, 1, 5);
-    player.vel?.set(0, 0, 0);
+    // player.js가 이미 pos.set(0,1,5) + health 복구 완료
     network.sendRespawn([0, 1, 5]);
-    // 무기 선택 오버레이 (죽은 사람도)
     showRoundWeaponSelect();
   }
   updateHud();
