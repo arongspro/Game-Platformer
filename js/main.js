@@ -174,16 +174,42 @@ function onPointerLockChange() {
     return;
   }
 
-  // 배틀 중(룸 참가 & 매치 미종료)이면 ESC 눌러도 즉시 재요청 → 메뉴 못 나감
+  // 배틀 중이면 "BACK TO GAME" 버튼만 있는 심플 화면
   if (network.roomId && !matchEnded) {
-    setTimeout(() => {
-      if (!isLocked() && !_roundWeaponOpen && !_chatOpen) tryLock();
-    }, 30);
+    _showBattleOverlay();
     return;
   }
 
-  // 배틀 중이 아닐 때 → 정상적으로 메뉴 표시
+  // 배틀 중이 아닐 때 → 정상 메뉴
+  _hideBattleOverlay();
   lockOverlay.style.display = 'flex';
+}
+
+let _battleOverlay = null;
+function _showBattleOverlay() {
+  lockOverlay.style.display = 'none';
+  if (_battleOverlay) return;
+  _battleOverlay = document.createElement('div');
+  _battleOverlay.style.cssText = `
+    position:fixed; inset:0; z-index:800; display:flex;
+    align-items:center; justify-content:center;
+    background:rgba(0,0,0,0.7); backdrop-filter:blur(4px);
+  `;
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.textContent = '[ BACK TO GAME ]';
+  btn.style.cssText = `
+    font-family:'Orbitron',monospace; font-size:16px; letter-spacing:5px;
+    color:#00ffe0; background:rgba(0,255,224,0.12);
+    border:2px solid #00ffe0; padding:16px 40px; cursor:pointer;
+    box-shadow:0 0 32px rgba(0,255,224,0.4); text-shadow:0 0 12px #00ffe0;
+  `;
+  btn.addEventListener('click', () => { _hideBattleOverlay(); tryLock(); });
+  _battleOverlay.appendChild(btn);
+  document.body.appendChild(_battleOverlay);
+}
+function _hideBattleOverlay() {
+  if (_battleOverlay) { _battleOverlay.remove(); _battleOverlay = null; }
 }
 
 // ── 클릭하면 포인터락 재진입 배너 ──
@@ -1217,9 +1243,10 @@ function showRoundWeaponSelect() {
   const grid = document.getElementById('round-weapon-grid');
   if (grid) _renderRoundWeaponGrid(grid);
 
-  // 오버레이 먼저 표시 → exitPointerLock → onPointerLockChange에서 재요청 차단
   overlay.style.display = 'flex';
   lockOverlay.style.display = 'none';
+  _hideBattleOverlay();
+  // 포인터락 해제 → 버튼 클릭 가능 (onPointerLockChange에서 _roundWeaponOpen 체크로 재요청 차단)
   document.exitPointerLock?.();
 
   // 10초 카운트다운
