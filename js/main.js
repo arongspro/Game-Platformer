@@ -165,15 +165,14 @@ function onPointerLockChange() {
 
   if (isLocked()) {
     lockOverlay.style.display = 'none';
-    _hideClickToResume();
     return;
   }
 
   // 락 해제됨
-  lockOverlay.style.display = 'none';
-
-  // 무기선택/채팅 중이면 아무것도 안 함
-  if (_roundWeaponOpen || _chatOpen) return;
+  if (_roundWeaponOpen || _chatOpen) {
+    lockOverlay.style.display = 'none';
+    return;
+  }
 
   // 배틀 중(룸 참가 & 매치 미종료)이면 ESC 눌러도 즉시 재요청 → 메뉴 못 나감
   if (network.roomId && !matchEnded) {
@@ -183,7 +182,7 @@ function onPointerLockChange() {
     return;
   }
 
-  // 배틀 중이 아닐 때만 메뉴 표시
+  // 배틀 중이 아닐 때 → 정상적으로 메뉴 표시
   lockOverlay.style.display = 'flex';
 }
 
