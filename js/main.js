@@ -711,9 +711,9 @@ player.onDie = () => {
     const spawn = _getDuelSpawn();
     player.pos.set(...spawn.pos);
     network.sendRespawn(spawn.pos);
-    setTimeout(() => { _grantDuelSupply(); tryLock(); }, 1600);
+    setTimeout(() => { _grantDuelSupply(); }, 1600);
+    showRoundWeaponSelect();
   } else {
-    // player.js가 이미 pos.set(0,1,5) + health 복구 완료
     network.sendRespawn([0, 1, 5]);
     showRoundWeaponSelect();
   }
@@ -1609,17 +1609,15 @@ network.onKill = (targetId, kills, deaths) => {
   addKillfeed(`☠️ ${network.nickname} → ${targetNick}`, true);
   if (network.duelState === 'active' && network.duelRoomId) {
     network.sendDuelKill(network.duelRoomId, network.myUid, network.nickname);
+    showRoundWeaponSelect();
   } else {
     if (kills >= matchKillLimit && !matchEnded) {
       matchEnded = true;
       addKillfeed(`MATCH WIN · ${matchKillLimit} KILLS`, true);
     }
-    // 킬한 사람도 스폰 위치로 이동
     player.pos.set(0, 1, 5);
     player.vel?.set(0, 0, 0);
-    // 상대(죽은 사람)에게 라운드 오버 신호 전파
     network.sendRoundOver?.();
-    // 나도 무기 선택 오버레이
     showRoundWeaponSelect();
   }
   updateHud();
