@@ -2,7 +2,7 @@
 // 서버의 POST /api/register, POST /api/login 으로 통신
 
 // ── 서버 주소 ─────────────────────────────────────────────
-// 개발: http://localhost:3000
+// 개발: http://localhost:25565
 // 배포: 서버 IP 또는 도메인으로 변경
 export const API_BASE = 'https://game-proxy.juhyung1234567910.workers.dev';// 비워두면 현재 도메인 기준 (같은 서버에서 서빙할 때)
 
