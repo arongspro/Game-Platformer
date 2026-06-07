@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>개인정보처리방침 — VOID PROTOCOL</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --hud: #00ffe0;
+      --warn: #ffcc00;
+      --danger: #ff4444;
+      --bg: #060810;
+      --border: rgba(0,255,224,0.22);
+      --dim: rgba(0,255,224,0.08);
+    }
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+    body {
+      background: var(--bg);
+      color: rgba(255,255,255,0.82);
+      font-family: 'Share Tech Mono', monospace;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* grid scanlines */
+    body::before {
+      content:'';
+      position:fixed; inset:0; pointer-events:none; z-index:0;
+      background-image:
+        linear-gradient(rgba(0,255,224,0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,255,224,0.025) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+    body::after {
+      content:'';
+      position:fixed; inset:0; pointer-events:none; z-index:0;
+      background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(0,255,224,0.07), transparent 65%);
+    }
+
+    /* NAV */
+    nav {
+      position: sticky; top:0; z-index:100;
+      display: flex; align-items:center; justify-content:space-between;
+      padding: 14px 32px;
+      background: rgba(6,8,16,0.88);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(12px);
+      animation: slideDown .5s cubic-bezier(.16,1,.3,1) both;
+    }
+    .nav-brand {
+      font-family:'Orbitron',monospace;
+      font-size:11px; letter-spacing:5px; color:var(--hud);
+      text-decoration:none;
+      display:flex; align-items:center; gap:10px;
+    }
+    .nav-brand::before {
+      content:'';
+      width:8px; height:8px;
+      border:1px solid var(--hud);
+      transform:rotate(45deg);
+      box-shadow:0 0 10px rgba(0,255,224,0.5);
+      animation: pulse 2s ease-in-out infinite;
+    }
+    .nav-back {
+      font-size:10px; letter-spacing:3px; color:rgba(255,255,255,0.4);
+      text-decoration:none;
+      border:1px solid rgba(255,255,255,0.12);
+      padding:7px 14px;
+      transition:.15s;
+    }
+    .nav-back:hover { color:var(--hud); border-color:var(--border); }
+
+    /* HERO */
+    .hero {
+      position:relative; z-index:1;
+      padding: 72px 32px 48px;
+      max-width: 900px; margin:0 auto;
+      animation: fadeUp .6s .1s cubic-bezier(.16,1,.3,1) both;
+    }
+    .hero-tag {
+      font-size:9px; letter-spacing:5px; color:var(--hud);
+      opacity:.55; margin-bottom:14px;
+    }
+    h1 {
+      font-family:'Orbitron',monospace;
+      font-size: clamp(22px,4vw,38px);
+      letter-spacing:4px; color:#fff;
+      line-height:1.1; margin-bottom:18px;
+    }
+    h1 span { color:var(--hud); }
+    .hero-meta {
+      font-size:10px; letter-spacing:3px;
+      color:rgba(255,255,255,0.35);
+      display:flex; gap:24px; flex-wrap:wrap;
+    }
+    .hero-meta b { color:var(--warn); }
+
+    /* CONTENT */
+    .content {
+      position:relative; z-index:1;
+      max-width:900px; margin:0 auto;
+      padding:0 32px 96px;
+    }
+
+    .section {
+      margin-bottom:48px;
+      animation: fadeUp .5s cubic-bezier(.16,1,.3,1) both;
+    }
+    .section:nth-child(1) { animation-delay:.15s }
+    .section:nth-child(2) { animation-delay:.2s }
+    .section:nth-child(3) { animation-delay:.25s }
+    .section:nth-child(4) { animation-delay:.3s }
+    .section:nth-child(5) { animation-delay:.35s }
+    .section:nth-child(6) { animation-delay:.4s }
+    .section:nth-child(7) { animation-delay:.45s }
+
+    .section-header {
+      display:flex; align-items:center; gap:14px;
+      margin-bottom:20px; padding-bottom:12px;
+      border-bottom:1px solid var(--border);
+    }
+    .section-num {
+      font-family:'Orbitron',monospace;
+      font-size:10px; letter-spacing:3px;
+      color:var(--hud); opacity:.5;
+      min-width:28px;
+    }
+    h2 {
+      font-family:'Orbitron',monospace;
+      font-size:13px; letter-spacing:4px; color:var(--hud);
+    }
+
+    p {
+      font-size:13px; line-height:1.9;
+      color:rgba(255,255,255,0.68);
+      margin-bottom:14px;
+    }
+    p:last-child { margin-bottom:0; }
+
+    .info-grid {
+      display:grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px,1fr));
+      gap:12px; margin:16px 0;
+    }
+    .info-card {
+      background:var(--dim);
+      border:1px solid var(--border);
+      padding:16px 18px;
+    }
+    .info-card-label {
+      font-size:9px; letter-spacing:3px;
+      color:var(--hud); opacity:.6;
+      margin-bottom:8px;
+    }
+    .info-card-val {
+      font-size:12px; color:rgba(255,255,255,0.85);
+      line-height:1.6;
+    }
+
+    .highlight-box {
+      background: rgba(0,255,224,0.05);
+      border:1px solid rgba(0,255,224,0.25);
+      border-left:3px solid var(--hud);
+      padding:16px 20px;
+      margin:16px 0;
+      font-size:12px; line-height:1.8;
+      color:rgba(255,255,255,0.75);
+    }
+    .warn-box {
+      background: rgba(255,204,0,0.05);
+      border:1px solid rgba(255,204,0,0.25);
+      border-left:3px solid var(--warn);
+      padding:16px 20px;
+      margin:16px 0;
+      font-size:12px; line-height:1.8;
+      color:rgba(255,255,255,0.75);
+    }
+
+    ul {
+      list-style:none;
+      margin:12px 0;
+    }
+    ul li {
+      font-size:13px; line-height:1.8;
+      color:rgba(255,255,255,0.68);
+      padding:5px 0 5px 20px;
+      position:relative;
+      border-bottom:1px solid rgba(255,255,255,0.04);
+    }
+    ul li::before {
+      content:'▸';
+      position:absolute; left:0;
+      color:var(--hud); opacity:.6;
+    }
+
+    /* FOOTER */
+    footer {
+      position:relative; z-index:1;
+      border-top:1px solid var(--border);
+      padding:28px 32px;
+      display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;
+      font-size:9px; letter-spacing:3px;
+      color:rgba(255,255,255,0.22);
+    }
+    footer a { color:var(--hud); opacity:.5; text-decoration:none; }
+    footer a:hover { opacity:1; }
+
+    @keyframes slideDown {
+      from { transform:translateY(-16px); opacity:0; }
+      to   { transform:translateY(0); opacity:1; }
+    }
+    @keyframes fadeUp {
+      from { transform:translateY(14px); opacity:0; }
+      to   { transform:translateY(0); opacity:1; }
+    }
+    @keyframes pulse {
+      0%,100% { opacity:.5; transform:rotate(45deg) scale(.88); }
+      50%      { opacity:1;  transform:rotate(45deg) scale(1.15); }
+    }
+
+    @media(max-width:600px) {
+      nav { padding:12px 18px; }
+      .hero, .content { padding-left:18px; padding-right:18px; }
+      h1 { font-size:20px; }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-brand" href="index.html">VOID PROTOCOL</a>
+  <a class="nav-back" href="index.html">← 게임으로 돌아가기</a>
+</nav>
+
+<section class="hero">
+  <div class="hero-tag">LEGAL DOCUMENT · PRIVACY</div>
+  <h1>개인정보<br/><span>처리방침</span></h1>
+  <div class="hero-meta">
+    <span>시행일 <b>2025.01.01</b></span>
+    <span>최종 수정 <b>2025.06.01</b></span>
+    <span>버전 <b>v1.0</b></span>
+  </div>
+</section>
+
+<div class="content">
+
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">01</span>
+      <h2>개요 및 목적</h2>
+    </div>
+    <p>VOID PROTOCOL(이하 "서비스")은 이용자의 개인정보를 소중히 여기며, 「개인정보 보호법」 및 관련 법령을 준수합니다. 본 방침은 서비스가 어떤 정보를 수집하고, 어떻게 사용하며, 어떻게 보호하는지를 명확히 안내하기 위해 작성되었습니다.</p>
+    <div class="highlight-box">
+      본 서비스는 이용자의 최소한의 정보만을 수집하며, 수집된 정보는 서비스 제공 목적 이외에 사용되지 않습니다.
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">02</span>
+      <h2>수집하는 개인정보 항목</h2>
+    </div>
+    <p>서비스 이용 시 아래와 같은 정보가 수집될 수 있습니다.</p>
+    <div class="info-grid">
+      <div class="info-card">
+        <div class="info-card-label">회원가입 시</div>
+        <div class="info-card-val">이메일 주소<br/>닉네임<br/>비밀번호(암호화 저장)</div>
+      </div>
+      <div class="info-card">
+        <div class="info-card-label">게임 이용 시</div>
+        <div class="info-card-val">킬/데스 통계<br/>매치 기록<br/>접속 시간</div>
+      </div>
+      <div class="info-card">
+        <div class="info-card-label">자동 수집</div>
+        <div class="info-card-val">IP 주소<br/>브라우저 정보<br/>접속 기기 정보</div>
+      </div>
+      <div class="info-card">
+        <div class="info-card-label">광고 서비스</div>
+        <div class="info-card-val">쿠키(Google AdSense)<br/>광고 식별자<br/>방문 페이지 정보</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">03</span>
+      <h2>개인정보 수집 및 이용 목적</h2>
+    </div>
+    <ul>
+      <li>회원 가입 및 본인 확인, 서비스 이용 자격 부여</li>
+      <li>멀티플레이어 게임 서비스 제공 (닉네임 표시, 매치 연결)</li>
+      <li>게임 통계 및 랭킹 시스템 운영</li>
+      <li>부정 이용 탐지 및 서비스 보안 유지</li>
+      <li>Google AdSense를 통한 맞춤형 광고 제공</li>
+      <li>서비스 개선 및 신규 기능 개발</li>
+      <li>공지사항 및 중요 안내 전달</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">04</span>
+      <h2>Google AdSense 및 쿠키 사용</h2>
+    </div>
+    <p>본 서비스는 Google AdSense를 통해 광고를 게재합니다. Google은 쿠키를 사용하여 이용자의 이전 방문 기록을 기반으로 광고를 제공할 수 있습니다.</p>
+    <div class="warn-box">
+      Google의 광고 쿠키 사용을 원하지 않으실 경우, <a href="https://www.google.com/settings/ads" target="_blank" style="color:var(--warn);text-decoration:none;">Google 광고 설정</a>에서 맞춤 광고를 비활성화하실 수 있습니다.
+    </div>
+    <ul>
+      <li>Google AdSense는 DART 쿠키를 사용하여 인터넷 방문 기록 기반 광고를 제공합니다</li>
+      <li>이용자는 브라우저 설정에서 쿠키를 거부하거나 삭제할 수 있습니다</li>
+      <li>쿠키 거부 시 일부 서비스 기능 이용이 제한될 수 있습니다</li>
+      <li>Google의 개인정보 처리방침: <a href="https://policies.google.com/privacy" target="_blank" style="color:var(--hud);text-decoration:none;">policies.google.com/privacy</a></li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">05</span>
+      <h2>개인정보 보유 및 파기</h2>
+    </div>
+    <div class="info-grid">
+      <div class="info-card">
+        <div class="info-card-label">회원 정보</div>
+        <div class="info-card-val">탈퇴 시까지<br/>(탈퇴 후 즉시 파기)</div>
+      </div>
+      <div class="info-card">
+        <div class="info-card-label">게임 로그</div>
+        <div class="info-card-val">최대 1년<br/>보관 후 파기</div>
+      </div>
+      <div class="info-card">
+        <div class="info-card-label">법령 보존 의무</div>
+        <div class="info-card-val">관련 법령에 따라<br/>별도 보관</div>
+      </div>
+    </div>
+    <p>수집 목적이 달성된 개인정보는 복구 불가능한 방법으로 즉시 파기합니다. 전자적 파일은 기술적 방법으로 삭제하며, 출력물은 분쇄 또는 소각합니다.</p>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">06</span>
+      <h2>이용자의 권리</h2>
+    </div>
+    <p>이용자는 언제든지 다음과 같은 권리를 행사할 수 있습니다.</p>
+    <ul>
+      <li>개인정보 열람 요청</li>
+      <li>개인정보 오류 정정 요청</li>
+      <li>개인정보 삭제(탈퇴) 요청</li>
+      <li>개인정보 처리 정지 요청</li>
+    </ul>
+    <p>위 권리 행사는 계정 설정 페이지 또는 아래 연락처를 통해 가능하며, 요청 접수 후 10영업일 이내에 처리합니다.</p>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">07</span>
+      <h2>개인정보 보호책임자</h2>
+    </div>
+    <div class="highlight-box">
+      개인정보와 관련한 문의사항은 아래 연락처로 문의해 주시기 바랍니다.<br/><br/>
+      <strong style="color:var(--hud);">이메일:</strong> privacy@voidprotocol.io<br/>
+      <strong style="color:var(--hud);">처리 기간:</strong> 접수 후 10영업일 이내 회신
+    </div>
+    <p>본 개인정보처리방침은 법령 또는 서비스 변경에 따라 수정될 수 있으며, 변경 시 서비스 내 공지사항을 통해 안내합니다.</p>
+  </div>
+
+</div>
+
+<footer>
+  <span>© 2025 VOID PROTOCOL. ALL RIGHTS RESERVED.</span>
+  <div style="display:flex;gap:20px;">
+    <a href="privacy.html">개인정보처리방침</a>
+    <a href="terms.html">이용약관</a>
+    <a href="about.html">서비스 소개</a>
+  </div>
+</footer>
+
+</body>
+</html>
