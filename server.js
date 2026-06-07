@@ -30,9 +30,12 @@ db.exec(`
     kills      INTEGER NOT NULL DEFAULT 0,
     deaths     INTEGER NOT NULL DEFAULT 0,
     rating     INTEGER NOT NULL DEFAULT 0,
+    banned     INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
   );
 `);
+// 기존 DB에 banned 컬럼 없으면 추가 (이미 있으면 에러 무시)
+try { db.exec('ALTER TABLE users ADD COLUMN banned INTEGER NOT NULL DEFAULT 0;'); } catch (_) {}
 
 // ── Prepared Statements ────────────────────────────────────
 const stmtGetUser    = db.prepare('SELECT * FROM users WHERE nickname = ?');
@@ -44,6 +47,8 @@ const stmtUpdateStats = db.prepare(`
   UPDATE users SET kills = @kills, deaths = @deaths, rating = @rating
   WHERE nickname = @nickname
 `);
+const stmtBanUser   = db.prepare('UPDATE users SET banned = 1 WHERE nickname = ?');
+const stmtCheckBan  = db.prepare('SELECT banned FROM users WHERE nickname = ?');
 
 // ── 비밀번호 해시 (auth.js 와 동일한 로직) ────────────────
 function hashPassword(pw) {
@@ -216,6 +221,14 @@ io.on('connection', socket => {
 
   // ── 입장 ──────────────────────────────────────────────
   socket.on('join', ({ uid, nickname, roomId, pixels, kills, deaths, rating }) => {
+    // 밴 확인
+    const banRow = stmtCheckBan.get(nickname);
+    if (banRow && banRow.banned) {
+      socket.emit('banned');
+      socket.disconnect(true);
+      return;
+    }
+
     myUid      = uid;
     myNickname = nickname;
     myRoomId   = (roomId || 'PUBLIC').toUpperCase();
@@ -351,6 +364,48 @@ io.on('connection', socket => {
   // ── 채팅 ──────────────────────────────────────────────
   socket.on('chat', ({ text }) => {
     if (!myUid || !myRoomId || !text) return;
+
+    // @cheater 신고 처리
+    const cheaterMatch = text.match(/^@cheater\s+(\S+)/i);
+    if (cheaterMatch) {
+      const targetNick = cheaterMatch[1].trim();
+      const targetRow  = stmtCheckBan.get(targetNick);
+
+      if (!targetRow) {
+        // 존재하지 않는 유저
+        socket.emit('chat', { uid: 'SYSTEM', nickname: '[ SYSTEM ]', text: `❌ 유저 "${targetNick}" 를 찾을 수 없습니다.`, ts: Date.now() });
+        return;
+      }
+      if (targetRow.banned) {
+        socket.emit('chat', { uid: 'SYSTEM', nickname: '[ SYSTEM ]', text: `⚠️ "${targetNick}" 는 이미 밴 상태입니다.`, ts: Date.now() });
+        return;
+      }
+
+      // 밴 처리
+      stmtBanUser.run(targetNick);
+
+      // 해당 유저가 온라인이면 즉시 강제 퇴장
+      const targetSid = Object.entries(uidToSocket).find(([uid]) => {
+        const p = presence[uid];
+        return p && p.nickname === targetNick;
+      });
+      if (targetSid) {
+        const targetSocket = io.sockets.sockets.get(uidToSocket[targetSid[0]]);
+        if (targetSocket) {
+          targetSocket.emit('banned');
+          targetSocket.disconnect(true);
+        }
+      }
+
+      // 방 전체에 알림
+      io.to(myRoomId).emit('chat', {
+        uid: 'SYSTEM', nickname: '[ SYSTEM ]',
+        text: `🔨 "${targetNick}" 가 치터 신고로 밴 처리되었습니다.`,
+        ts: Date.now(),
+      });
+      return;
+    }
+
     io.to(myRoomId).emit('chat', {
       uid: myUid, nickname: myNickname,
       text: text.slice(0, 80), ts: Date.now(),
