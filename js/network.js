@@ -90,6 +90,11 @@ export class Network {
         console.warn('[Network] 소켓 끊김');
       });
 
+      this._socket.on('banned', () => {
+        alert('🔨 당신의 계정이 치터 신고로 인해 밴 처리되었습니다.\n서버에서 퇴장합니다.');
+        window.location.replace('login.html');
+      });
+
       this._socket.on('reconnect', () => {
         // 재연결 시 자동으로 join 재전송
         this._socket.emit('join', {
