@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>이용약관 — VOID PROTOCOL</title>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --hud: #00ffe0;
+      --warn: #ffcc00;
+      --danger: #ff4444;
+      --bg: #060810;
+      --border: rgba(0,255,224,0.22);
+      --dim: rgba(0,255,224,0.08);
+    }
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+    body {
+      background: var(--bg);
+      color: rgba(255,255,255,0.82);
+      font-family: 'Share Tech Mono', monospace;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    body::before {
+      content:'';
+      position:fixed; inset:0; pointer-events:none; z-index:0;
+      background-image:
+        linear-gradient(rgba(0,255,224,0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,255,224,0.025) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+    body::after {
+      content:'';
+      position:fixed; inset:0; pointer-events:none; z-index:0;
+      background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(0,255,224,0.07), transparent 65%);
+    }
+
+    nav {
+      position:sticky; top:0; z-index:100;
+      display:flex; align-items:center; justify-content:space-between;
+      padding:14px 32px;
+      background:rgba(6,8,16,0.88);
+      border-bottom:1px solid var(--border);
+      backdrop-filter:blur(12px);
+      animation:slideDown .5s cubic-bezier(.16,1,.3,1) both;
+    }
+    .nav-brand {
+      font-family:'Orbitron',monospace;
+      font-size:11px; letter-spacing:5px; color:var(--hud);
+      text-decoration:none;
+      display:flex; align-items:center; gap:10px;
+    }
+    .nav-brand::before {
+      content:'';
+      width:8px; height:8px;
+      border:1px solid var(--hud);
+      transform:rotate(45deg);
+      box-shadow:0 0 10px rgba(0,255,224,0.5);
+      animation:pulse 2s ease-in-out infinite;
+    }
+    .nav-back {
+      font-size:10px; letter-spacing:3px; color:rgba(255,255,255,0.4);
+      text-decoration:none;
+      border:1px solid rgba(255,255,255,0.12);
+      padding:7px 14px;
+      transition:.15s;
+    }
+    .nav-back:hover { color:var(--hud); border-color:var(--border); }
+
+    .hero {
+      position:relative; z-index:1;
+      padding:72px 32px 48px;
+      max-width:900px; margin:0 auto;
+      animation:fadeUp .6s .1s cubic-bezier(.16,1,.3,1) both;
+    }
+    .hero-tag { font-size:9px; letter-spacing:5px; color:var(--hud); opacity:.55; margin-bottom:14px; }
+    h1 {
+      font-family:'Orbitron',monospace;
+      font-size:clamp(22px,4vw,38px);
+      letter-spacing:4px; color:#fff;
+      line-height:1.1; margin-bottom:18px;
+    }
+    h1 span { color:var(--warn); }
+    .hero-meta {
+      font-size:10px; letter-spacing:3px;
+      color:rgba(255,255,255,0.35);
+      display:flex; gap:24px; flex-wrap:wrap;
+    }
+    .hero-meta b { color:var(--warn); }
+
+    /* TOC */
+    .toc {
+      position:relative; z-index:1;
+      max-width:900px; margin:0 auto;
+      padding:0 32px 32px;
+      animation:fadeUp .5s .2s cubic-bezier(.16,1,.3,1) both;
+    }
+    .toc-inner {
+      background:rgba(0,0,0,0.3);
+      border:1px solid var(--border);
+      padding:20px 24px;
+      display:grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px,1fr));
+      gap:6px;
+    }
+    .toc-title {
+      grid-column:1/-1;
+      font-family:'Orbitron',monospace;
+      font-size:9px; letter-spacing:4px; color:var(--hud);
+      margin-bottom:10px; opacity:.7;
+    }
+    .toc a {
+      font-size:11px; letter-spacing:1px;
+      color:rgba(255,255,255,0.45);
+      text-decoration:none;
+      padding:4px 0;
+      display:flex; align-items:center; gap:8px;
+      transition:.15s;
+    }
+    .toc a::before { content:'▸'; color:var(--hud); opacity:.4; font-size:9px; }
+    .toc a:hover { color:var(--hud); }
+
+    .content {
+      position:relative; z-index:1;
+      max-width:900px; margin:0 auto;
+      padding:0 32px 96px;
+    }
+
+    .section {
+      margin-bottom:52px;
+      animation:fadeUp .5s cubic-bezier(.16,1,.3,1) both;
+      scroll-margin-top:80px;
+    }
+    .section:nth-child(1){animation-delay:.15s}
+    .section:nth-child(2){animation-delay:.2s}
+    .section:nth-child(3){animation-delay:.25s}
+    .section:nth-child(4){animation-delay:.3s}
+    .section:nth-child(5){animation-delay:.35s}
+    .section:nth-child(6){animation-delay:.4s}
+    .section:nth-child(7){animation-delay:.45s}
+    .section:nth-child(8){animation-delay:.5s}
+    .section:nth-child(9){animation-delay:.55s}
+
+    .section-header {
+      display:flex; align-items:center; gap:14px;
+      margin-bottom:20px; padding-bottom:12px;
+      border-bottom:1px solid var(--border);
+    }
+    .section-num {
+      font-family:'Orbitron',monospace;
+      font-size:10px; letter-spacing:3px; color:var(--warn); opacity:.6;
+      min-width:28px;
+    }
+    h2 {
+      font-family:'Orbitron',monospace;
+      font-size:13px; letter-spacing:4px; color:var(--warn);
+    }
+
+    p {
+      font-size:13px; line-height:1.9;
+      color:rgba(255,255,255,0.68);
+      margin-bottom:14px;
+    }
+    p:last-child { margin-bottom:0; }
+
+    ul {
+      list-style:none; margin:12px 0;
+    }
+    ul li {
+      font-size:13px; line-height:1.8;
+      color:rgba(255,255,255,0.68);
+      padding:6px 0 6px 20px;
+      position:relative;
+      border-bottom:1px solid rgba(255,255,255,0.04);
+    }
+    ul li:last-child { border-bottom:none; }
+    ul li::before {
+      content:'▸'; position:absolute; left:0;
+      color:var(--warn); opacity:.6;
+    }
+
+    .highlight-box {
+      background:rgba(0,255,224,0.05);
+      border:1px solid rgba(0,255,224,0.25);
+      border-left:3px solid var(--hud);
+      padding:16px 20px; margin:16px 0;
+      font-size:12px; line-height:1.8;
+      color:rgba(255,255,255,0.75);
+    }
+    .warn-box {
+      background:rgba(255,68,68,0.05);
+      border:1px solid rgba(255,68,68,0.25);
+      border-left:3px solid var(--danger);
+      padding:16px 20px; margin:16px 0;
+      font-size:12px; line-height:1.8;
+      color:rgba(255,255,255,0.75);
+    }
+    .yellow-box {
+      background:rgba(255,204,0,0.05);
+      border:1px solid rgba(255,204,0,0.25);
+      border-left:3px solid var(--warn);
+      padding:16px 20px; margin:16px 0;
+      font-size:12px; line-height:1.8;
+      color:rgba(255,255,255,0.75);
+    }
+
+    .rule-grid {
+      display:grid;
+      grid-template-columns:repeat(auto-fill,minmax(260px,1fr));
+      gap:12px; margin:16px 0;
+    }
+    .rule-card {
+      padding:16px;
+      border:1px solid rgba(255,255,255,0.08);
+      background:rgba(255,255,255,0.02);
+    }
+    .rule-card.allowed { border-color:rgba(0,255,224,0.2); }
+    .rule-card.forbidden { border-color:rgba(255,68,68,0.2); }
+    .rule-card-title {
+      font-family:'Orbitron',monospace;
+      font-size:9px; letter-spacing:3px; margin-bottom:10px;
+    }
+    .rule-card.allowed .rule-card-title { color:var(--hud); }
+    .rule-card.forbidden .rule-card-title { color:var(--danger); }
+    .rule-card ul li::before { color:inherit; }
+    .rule-card.allowed ul li::before { color:var(--hud); }
+    .rule-card.forbidden ul li::before { color:var(--danger); }
+
+    footer {
+      position:relative; z-index:1;
+      border-top:1px solid var(--border);
+      padding:28px 32px;
+      display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;
+      font-size:9px; letter-spacing:3px;
+      color:rgba(255,255,255,0.22);
+    }
+    footer a { color:var(--hud); opacity:.5; text-decoration:none; }
+    footer a:hover { opacity:1; }
+
+    @keyframes slideDown {
+      from { transform:translateY(-16px); opacity:0; }
+      to   { transform:translateY(0); opacity:1; }
+    }
+    @keyframes fadeUp {
+      from { transform:translateY(14px); opacity:0; }
+      to   { transform:translateY(0); opacity:1; }
+    }
+    @keyframes pulse {
+      0%,100% { opacity:.5; transform:rotate(45deg) scale(.88); }
+      50%      { opacity:1;  transform:rotate(45deg) scale(1.15); }
+    }
+
+    @media(max-width:600px) {
+      nav { padding:12px 18px; }
+      .hero,.toc,.content { padding-left:18px; padding-right:18px; }
+      h1 { font-size:20px; }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-brand" href="index.html">VOID PROTOCOL</a>
+  <a class="nav-back" href="index.html">← 게임으로 돌아가기</a>
+</nav>
+
+<section class="hero">
+  <div class="hero-tag">LEGAL DOCUMENT · TERMS</div>
+  <h1>서비스<br/><span>이용약관</span></h1>
+  <div class="hero-meta">
+    <span>시행일 <b>2025.01.01</b></span>
+    <span>최종 수정 <b>2025.06.01</b></span>
+    <span>버전 <b>v1.0</b></span>
+  </div>
+</section>
+
+<div class="toc">
+  <div class="toc-inner">
+    <div class="toc-title">목차 · TABLE OF CONTENTS</div>
+    <a href="#s1">01. 목적 및 적용</a>
+    <a href="#s2">02. 서비스 내용</a>
+    <a href="#s3">03. 계정 및 가입</a>
+    <a href="#s4">04. 이용 규칙</a>
+    <a href="#s5">05. 금지 행위</a>
+    <a href="#s6">06. 지식재산권</a>
+    <a href="#s7">07. 광고</a>
+    <a href="#s8">08. 면책 사항</a>
+    <a href="#s9">09. 약관 변경 및 분쟁</a>
+  </div>
+</div>
+
+<div class="content">
+
+  <div class="section" id="s1">
+    <div class="section-header">
+      <span class="section-num">01</span>
+      <h2>목적 및 적용</h2>
+    </div>
+    <p>본 약관은 VOID PROTOCOL(이하 "서비스")이 제공하는 멀티플레이어 FPS 게임 서비스의 이용 조건 및 절차, 이용자와 서비스 운영자 간의 권리·의무 관계를 규정함을 목적으로 합니다.</p>
+    <div class="highlight-box">
+      서비스에 접속하거나 이용하는 순간, 본 약관의 모든 내용에 동의한 것으로 간주됩니다. 약관에 동의하지 않으실 경우 서비스 이용을 중단해 주시기 바랍니다.
+    </div>
+  </div>
+
+  <div class="section" id="s2">
+    <div class="section-header">
+      <span class="section-num">02</span>
+      <h2>서비스 내용</h2>
+    </div>
+    <p>VOID PROTOCOL은 웹 브라우저 기반의 멀티플레이어 FPS 게임으로, 다음 기능을 제공합니다.</p>
+    <ul>
+      <li>실시간 멀티플레이어 매치 (공개 방 / 비공개 방 / 퀵매치)</li>
+      <li>다양한 맵 및 게임 모드 (일반전, 듀얼 아레나)</li>
+      <li>랭크 시스템 및 통계 기록</li>
+      <li>채팅 기능</li>
+      <li>커스텀 로드아웃 설정</li>
+    </ul>
+    <p>서비스 운영자는 사전 고지 없이 서비스의 내용을 변경하거나 일시 중단할 수 있으며, 이로 인한 손해에 대해 별도의 보상을 하지 않습니다.</p>
+  </div>
+
+  <div class="section" id="s3">
+    <div class="section-header">
+      <span class="section-num">03</span>
+      <h2>계정 및 가입</h2>
+    </div>
+    <ul>
+      <li>서비스 이용을 위해 이메일 주소와 닉네임으로 계정을 생성해야 합니다</li>
+      <li>만 14세 미만은 보호자의 동의 없이 계정을 생성할 수 없습니다</li>
+      <li>하나의 이용자는 하나의 계정만 보유할 수 있습니다</li>
+      <li>계정 정보(비밀번호 등)의 관리 책임은 이용자 본인에게 있습니다</li>
+      <li>타인에게 계정을 양도하거나 대여하는 행위는 금지됩니다</li>
+    </ul>
+    <div class="yellow-box">
+      계정이 제3자에 의해 무단으로 사용된 경우, 즉시 운영자에게 신고해 주시기 바랍니다. 신고 전 발생한 피해에 대해서는 운영자가 책임지지 않습니다.
+    </div>
+  </div>
+
+  <div class="section" id="s4">
+    <div class="section-header">
+      <span class="section-num">04</span>
+      <h2>이용 규칙</h2>
+    </div>
+    <div class="rule-grid">
+      <div class="rule-card allowed">
+        <div class="rule-card-title">✓ 허용 사항</div>
+        <ul>
+          <li>게임 플레이 및 매치 참가</li>
+          <li>채팅을 통한 정상적인 소통</li>
+          <li>게임 스크린샷·영상 공유</li>
+          <li>친구 초대 및 방 생성</li>
+          <li>버그 신고 및 피드백 제출</li>
+        </ul>
+      </div>
+      <div class="rule-card forbidden">
+        <div class="rule-card-title">✗ 금지 사항</div>
+        <ul>
+          <li>핵, 치트, 매크로 사용</li>
+          <li>욕설 및 혐오 발언</li>
+          <li>고의적 팀킬·게임 방해</li>
+          <li>타인 개인정보 수집·유출</li>
+          <li>허위 신고 및 어뷰징</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="section" id="s5">
+    <div class="section-header">
+      <span class="section-num">05</span>
+      <h2>금지 행위 및 제재</h2>
+    </div>
+    <p>아래 행위를 적발한 경우, 경고 없이 계정을 일시 정지 또는 영구 정지할 수 있습니다.</p>
+    <ul>
+      <li>프로그램을 이용한 게임 데이터 위·변조 (핵, 치트)</li>
+      <li>서버에 과도한 부하를 주는 행위 (DDoS, 비정상적 접속)</li>
+      <li>다른 이용자 또는 운영자를 사칭하는 행위</li>
+      <li>음란물, 혐오 표현, 불법 콘텐츠 유포</li>
+      <li>상업적 목적의 광고성 채팅·스팸</li>
+      <li>관련 법령에 위반되는 일체의 행위</li>
+    </ul>
+    <div class="warn-box">
+      부정 행위 이용자는 영구 IP 차단 조치를 포함한 법적 대응을 받을 수 있습니다.
+    </div>
+  </div>
+
+  <div class="section" id="s6">
+    <div class="section-header">
+      <span class="section-num">06</span>
+      <h2>지식재산권</h2>
+    </div>
+    <p>서비스 내의 모든 콘텐츠(게임 코드, 그래픽, 사운드, UI 디자인, 브랜드명 등)에 대한 저작권 및 지식재산권은 서비스 운영자에게 귀속됩니다.</p>
+    <ul>
+      <li>이용자는 서비스 콘텐츠를 개인적·비상업적 목적으로만 이용할 수 있습니다</li>
+      <li>게임 플레이 영상 및 스크린샷은 출처 표기 후 공유 가능합니다</li>
+      <li>서비스 코드를 역공학(리버스 엔지니어링)하거나 복제하는 행위는 금지됩니다</li>
+      <li>상업적 이용 시 사전 서면 동의가 필요합니다</li>
+    </ul>
+  </div>
+
+  <div class="section" id="s7">
+    <div class="section-header">
+      <span class="section-num">07</span>
+      <h2>광고</h2>
+    </div>
+    <p>본 서비스는 Google AdSense를 통해 광고를 게재합니다. 이용자는 서비스 이용 중 광고가 표시될 수 있음에 동의합니다.</p>
+    <ul>
+      <li>광고는 Google의 정책에 따라 제공되며 운영자가 광고 내용을 직접 통제하지 않습니다</li>
+      <li>광고를 통해 발생하는 거래는 이용자와 광고주 사이의 계약이며 운영자는 책임지지 않습니다</li>
+      <li>광고 차단 소프트웨어 사용은 허용되나, 서비스 유지를 위해 광고 허용을 권장합니다</li>
+    </ul>
+  </div>
+
+  <div class="section" id="s8">
+    <div class="section-header">
+      <span class="section-num">08</span>
+      <h2>면책 사항</h2>
+    </div>
+    <p>서비스 운영자는 다음의 경우 책임을 지지 않습니다.</p>
+    <ul>
+      <li>천재지변, 서버 장애 등 불가항력으로 인한 서비스 중단</li>
+      <li>이용자의 귀책사유로 인한 서비스 이용 장애</li>
+      <li>이용자 간 게임 플레이로 인한 분쟁</li>
+      <li>서드파티 서비스(Firebase, Google 등)의 장애</li>
+      <li>이용자가 서비스 이용을 통해 기대하는 이익을 얻지 못한 경우</li>
+    </ul>
+    <div class="highlight-box">
+      본 서비스는 현재 상태(AS-IS)로 제공되며, 특정 목적에의 적합성을 보증하지 않습니다.
+    </div>
+  </div>
+
+  <div class="section" id="s9">
+    <div class="section-header">
+      <span class="section-num">09</span>
+      <h2>약관 변경 및 분쟁 해결</h2>
+    </div>
+    <p>운영자는 관련 법령 또는 서비스 정책 변경에 따라 본 약관을 수정할 수 있습니다. 변경 사항은 서비스 내 공지를 통해 7일 전 사전 고지합니다.</p>
+    <p>서비스 이용과 관련한 분쟁은 대한민국 법령을 준거법으로 하며, 소송이 제기될 경우 민사소송법에 따른 관할 법원을 제1심 법원으로 합니다.</p>
+    <div class="highlight-box">
+      문의 및 분쟁 신고: <strong style="color:var(--hud);">support@voidprotocol.io</strong>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <span>© 2025 VOID PROTOCOL. ALL RIGHTS RESERVED.</span>
+  <div style="display:flex;gap:20px;">
+    <a href="privacy.html">개인정보처리방침</a>
+    <a href="terms.html">이용약관</a>
+    <a href="about.html">서비스 소개</a>
+  </div>
+</footer>
+
+</body>
+</html>
