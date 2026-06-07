@@ -95,6 +95,11 @@ export class Network {
         window.location.replace('login.html');
       });
 
+      this._socket.on('server_full', () => {
+        alert('🚫 현재 서버가 가득 찼습니다 (최대 80명).\n잠시 후 다시 시도해주세요.');
+        window.location.replace('login.html');
+      });
+
       this._socket.on('reconnect', () => {
         // 재연결 시 자동으로 join 재전송
         this._socket.emit('join', {
