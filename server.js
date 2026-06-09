@@ -254,6 +254,110 @@ function ensureRoom(roomId) {
   return rooms[roomId];
 }
 
+// ── 플랫포머 무빙블록 서버 틱 ─────────────────────────
+// MBlock 로직 그대로 이식 (플레이어 없이 자동 이동만)
+const PF_ROOM = 'PLATFORMER';
+
+// [mx, my, ex, ey, playerFlag, initX, initY]
+const PF_MBLOCK_DEFS = [
+  // a=[0,-2,10,200,0]
+  { mx:0,  my:-2, ex:10,  ey:200, am:false },
+  // b=[4,0,250,10,1]
+  { mx:4,  my:0,  ex:250, ey:10,  am:true  },
+  // c=[4,0,50,10,1]
+  { mx:4,  my:0,  ex:50,  ey:10,  am:true  },
+  // d=[0,-2,10,200,1]
+  { mx:0,  my:-2, ex:10,  ey:200, am:true  },
+  // e=[4,0,250,10,0]
+  { mx:4,  my:0,  ex:250, ey:10,  am:false },
+  // f=[-4,0,250,10,0]
+  { mx:-4, my:0,  ex:250, ey:10,  am:false },
+  // g=[0,4,10,100,0]
+  { mx:0,  my:4,  ex:10,  ey:100, am:false },
+  // h=[0,-4,10,100,0]
+  { mx:0,  my:-4, ex:10,  ey:100, am:false },
+];
+
+// MAP에서 moveblock 위치 추출 (server.js 용 — MAP 정의 없이 하드코딩)
+// 클라이언트 MAP과 동일한 a~h 배열 매핑
+const PF_MAP_MBLOCKS = [
+  // [type_idx, col, row]  (x=col*50, y=row*50)
+  // a=[0,-2,10,200,0] → type 0
+  { t:0, x:50*1,  y:50*71 },   // row71 col1  [1,a,...]
+  { t:0, x:50*27, y:50*53 },   // [1,a,...]
+  // b=[4,0,250,10,1] → type 1
+  { t:1, x:50*10, y:50*68 },
+  { t:1, x:50*9,  y:50*82 },
+  // c=[4,0,50,10,1] → type 2
+  { t:2, x:50*6,  y:50*41 },
+  { t:2, x:50*20, y:50*53 },
+  { t:2, x:50*6,  y:50*68 },
+  // d=[0,-2,10,200,1] → type 3
+  { t:3, x:50*13, y:50*56 },
+  { t:3, x:50*17, y:50*63 },
+  // e=[4,0,250,10,0] → type 4
+  { t:4, x:50*6,  y:50*41 },
+  // f=[-4,0,250,10,0] → type 5
+  { t:5, x:50*17, y:50*41 },
+  { t:5, x:50*18, y:50*41 },
+  // g=[0,4,10,100,0] → type 6
+  { t:6, x:50*7,  y:50*27 },
+  { t:6, x:50*11, y:50*27 },
+  { t:6, x:50*15, y:50*27 },
+  { t:6, x:50*19, y:50*27 },
+  { t:6, x:50*23, y:50*27 },
+  // h=[0,-4,10,100,0] → type 7
+  { t:7, x:50*9,  y:50*29 },
+  { t:7, x:50*13, y:50*29 },
+  { t:7, x:50*17, y:50*29 },
+  { t:7, x:50*21, y:50*29 },
+];
+
+// 블록 상태 초기화
+const pfBlocks = PF_MAP_MBLOCKS.map(def => {
+  const d = PF_MBLOCK_DEFS[def.t];
+  return {
+    x: def.x, y: def.y,
+    inx: def.x, iny: def.y,
+    mx: d.mx, my: d.my,
+    ex: d.ex, ey: d.ey,
+    am: d.am,
+    movingWay: 1,
+    frame: 0,
+  };
+});
+
+// 틱마다 블록 위치 계산 (am=true 블록은 플레이어 없이 자동왕복으로 처리)
+function tickPfBlocks() {
+  for (const b of pfBlocks) {
+    if (b.am) {
+      // playerFlag 블록: 플레이어 없을 땐 그냥 왕복으로 처리
+      const over = Math.abs(b.x - b.inx) > b.ex || Math.abs(b.y - b.iny) > b.ey;
+      const back = (b.mx>0&&b.x<b.inx&&b.movingWay===-1)||(b.mx<0&&b.x>b.inx&&b.movingWay===-1)||
+                   (b.my>0&&b.y<b.iny&&b.movingWay===-1)||(b.my<0&&b.y>b.iny&&b.movingWay===-1);
+      if (over || back) b.movingWay *= -1;
+      b.x += b.mx * b.movingWay;
+      b.y += b.my * b.movingWay;
+    } else {
+      const a = Math.abs(b.x - b.inx) > b.ex && b.movingWay === 1;
+      const bv= Math.abs(b.y - b.iny) > b.ey && b.movingWay === 1;
+      const c = (b.mx>0&&b.x<b.inx&&b.movingWay===-1)||(b.mx<0&&b.x>b.inx&&b.movingWay===-1);
+      const d = (b.my>0&&b.y<b.iny&&b.movingWay===-1)||(b.my<0&&b.y>b.iny&&b.movingWay===-1);
+      if (a||bv||c||d) b.movingWay *= -1;
+      b.x += b.mx * b.movingWay;
+      b.y += b.my * b.movingWay;
+    }
+    b.frame++;
+  }
+}
+
+// 50ms 마다 틱 + PLATFORMER 룸에 브로드캐스트
+setInterval(() => {
+  tickPfBlocks();
+  const payload = pfBlocks.map(b => ({ x: b.x, y: b.y }));
+  io.to(PF_ROOM).emit('blocks_update', payload);
+}, 50);
+
 // ── Socket.IO ──────────────────────────────────────────────
 const io = new Server(server, {
   cors: { origin: '*' },
