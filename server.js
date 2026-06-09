@@ -30,12 +30,9 @@ db.exec(`
     kills      INTEGER NOT NULL DEFAULT 0,
     deaths     INTEGER NOT NULL DEFAULT 0,
     rating     INTEGER NOT NULL DEFAULT 0,
-    banned     INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
   );
 `);
-// 기존 DB에 banned 컬럼 없으면 추가 (이미 있으면 에러 무시)
-try { db.exec('ALTER TABLE users ADD COLUMN banned INTEGER NOT NULL DEFAULT 0;'); } catch (_) {}
 
 // ── Prepared Statements ────────────────────────────────────
 const stmtGetUser    = db.prepare('SELECT * FROM users WHERE nickname = ?');
@@ -47,8 +44,6 @@ const stmtUpdateStats = db.prepare(`
   UPDATE users SET kills = @kills, deaths = @deaths, rating = @rating
   WHERE nickname = @nickname
 `);
-const stmtBanUser   = db.prepare('UPDATE users SET banned = 1 WHERE nickname = ?');
-const stmtCheckBan  = db.prepare('SELECT banned FROM users WHERE nickname = ?');
 
 // ── 비밀번호 해시 (auth.js 와 동일한 로직) ────────────────
 function hashPassword(pw) {
@@ -214,30 +209,13 @@ const io = new Server(server, {
 // uid → socket.id 역매핑 (한 uid = 한 소켓 가정)
 const uidToSocket = {};
 
-const MAX_PLAYERS = 80;
-
 io.on('connection', socket => {
-  // 서버 전체 동접 80명 제한
-  if (io.engine.clientsCount > MAX_PLAYERS) {
-    socket.emit('server_full');
-    socket.disconnect(true);
-    return;
-  }
-
   let myUid      = null;
   let myNickname = null;
   let myRoomId   = null;
 
   // ── 입장 ──────────────────────────────────────────────
   socket.on('join', ({ uid, nickname, roomId, pixels, kills, deaths, rating }) => {
-    // 밴 확인
-    const banRow = stmtCheckBan.get(nickname);
-    if (banRow && banRow.banned) {
-      socket.emit('banned');
-      socket.disconnect(true);
-      return;
-    }
-
     myUid      = uid;
     myNickname = nickname;
     myRoomId   = (roomId || 'PUBLIC').toUpperCase();
@@ -373,48 +351,6 @@ io.on('connection', socket => {
   // ── 채팅 ──────────────────────────────────────────────
   socket.on('chat', ({ text }) => {
     if (!myUid || !myRoomId || !text) return;
-
-    // @cheater 신고 처리
-    const cheaterMatch = text.match(/^@cheater\s+(\S+)/i);
-    if (cheaterMatch) {
-      const targetNick = cheaterMatch[1].trim();
-      const targetRow  = stmtCheckBan.get(targetNick);
-
-      if (!targetRow) {
-        // 존재하지 않는 유저
-        socket.emit('chat', { uid: 'SYSTEM', nickname: '[ SYSTEM ]', text: `❌ 유저 "${targetNick}" 를 찾을 수 없습니다.`, ts: Date.now() });
-        return;
-      }
-      if (targetRow.banned) {
-        socket.emit('chat', { uid: 'SYSTEM', nickname: '[ SYSTEM ]', text: `⚠️ "${targetNick}" 는 이미 밴 상태입니다.`, ts: Date.now() });
-        return;
-      }
-
-      // 밴 처리
-      stmtBanUser.run(targetNick);
-
-      // 해당 유저가 온라인이면 즉시 강제 퇴장
-      const targetSid = Object.entries(uidToSocket).find(([uid]) => {
-        const p = presence[uid];
-        return p && p.nickname === targetNick;
-      });
-      if (targetSid) {
-        const targetSocket = io.sockets.sockets.get(uidToSocket[targetSid[0]]);
-        if (targetSocket) {
-          targetSocket.emit('banned');
-          targetSocket.disconnect(true);
-        }
-      }
-
-      // 방 전체에 알림
-      io.to(myRoomId).emit('chat', {
-        uid: 'SYSTEM', nickname: '[ SYSTEM ]',
-        text: `🔨 "${targetNick}" 가 치터 신고로 밴 처리되었습니다.`,
-        ts: Date.now(),
-      });
-      return;
-    }
-
     io.to(myRoomId).emit('chat', {
       uid: myUid, nickname: myNickname,
       text: text.slice(0, 80), ts: Date.now(),
@@ -498,6 +434,120 @@ io.on('connection', socket => {
     // 클라이언트가 구독 요청 → 현재 값 즉시 전송
     if (duels.rooms[roomId]) {
       socket.emit(`duel_room_${roomId}`, duels.rooms[roomId]);
+    }
+  });
+});
+
+// ══════════════════════════════════════════════════════════
+// ── CHESS namespace (/chess) ───────────────────────────────
+// 게임 서버와 완전 분리 — 상태/소켓/룸 전혀 공유 안 함
+// ══════════════════════════════════════════════════════════
+const chessIO = io.of('/chess');
+
+// chessRooms[roomId] = { white: uid|null, black: uid|null, board: null, turn: 'w', mode: 'classic', status: 'waiting' }
+const chessRooms = {};
+// chessUidToSocket[uid] = socket.id
+const chessUidToSocket = {};
+
+function ensureChessRoom(roomId) {
+  if (!chessRooms[roomId]) {
+    chessRooms[roomId] = {
+      white: null, black: null,
+      turn: 'w', mode: 'classic',
+      status: 'waiting', // waiting | playing | ended
+    };
+  }
+  return chessRooms[roomId];
+}
+
+chessIO.on('connection', socket => {
+  let myUid    = null;
+  let myRoomId = null;
+  let myColor  = null; // 'white' | 'black'
+
+  // ── 방 입장/생성 ──────────────────────────────────────
+  socket.on('chess_join', ({ uid, roomId, mode }) => {
+    myUid    = uid;
+    myRoomId = (roomId || '').toUpperCase().trim();
+    if (!myRoomId) return socket.emit('chess_error', { msg: '방 코드가 없습니다.' });
+
+    chessUidToSocket[uid] = socket.id;
+    const room = ensureChessRoom(myRoomId);
+
+    // 색 배정
+    if (!room.white) {
+      room.white = uid;
+      myColor    = 'white';
+    } else if (!room.black && room.white !== uid) {
+      room.black = uid;
+      myColor    = 'black';
+      room.status = 'playing';
+      if (mode) room.mode = mode;
+    } else if (room.white === uid) {
+      myColor = 'white';
+    } else if (room.black === uid) {
+      myColor = 'black';
+    } else {
+      return socket.emit('chess_error', { msg: '방이 꽉 찼습니다.' });
+    }
+
+    socket.join(myRoomId);
+    socket.emit('chess_joined', { color: myColor, roomId: myRoomId, mode: room.mode, status: room.status });
+
+    // 상대방에게 알림
+    if (room.status === 'playing') {
+      chessIO.to(myRoomId).emit('chess_start', { mode: room.mode });
+    }
+  });
+
+  // ── 수 전송 ───────────────────────────────────────────
+  // 클라이언트가 수를 두면 상대방에게 그대로 전달
+  // 검증은 각 클라이언트가 자체적으로 함 (캐주얼 수준)
+  socket.on('chess_move', (moveData) => {
+    if (!myRoomId) return;
+    // 상대방에게만 전송 (발신자 제외)
+    socket.to(myRoomId).emit('chess_move', moveData);
+  });
+
+  // ── 게임 종료 알림 ────────────────────────────────────
+  socket.on('chess_end', ({ result }) => {
+    if (!myRoomId) return;
+    const room = chessRooms[myRoomId];
+    if (room) room.status = 'ended';
+    chessIO.to(myRoomId).emit('chess_end', { result });
+  });
+
+  // ── 재시작 요청 ───────────────────────────────────────
+  socket.on('chess_restart', () => {
+    if (!myRoomId) return;
+    const room = chessRooms[myRoomId];
+    if (!room) return;
+    room.status = 'playing';
+    room.turn   = 'w';
+    chessIO.to(myRoomId).emit('chess_restart');
+  });
+
+  // ── 채팅 ──────────────────────────────────────────────
+  socket.on('chess_chat', ({ text }) => {
+    if (!myRoomId || !text) return;
+    chessIO.to(myRoomId).emit('chess_chat', {
+      color: myColor,
+      text: text.slice(0, 80),
+      ts: Date.now(),
+    });
+  });
+
+  // ── 연결 끊김 ─────────────────────────────────────────
+  socket.on('disconnect', () => {
+    if (!myUid) return;
+    delete chessUidToSocket[myUid];
+    if (myRoomId && chessRooms[myRoomId]) {
+      socket.to(myRoomId).emit('chess_opponent_left');
+      // 방 정리 (양쪽 다 나가면)
+      const room = chessRooms[myRoomId];
+      if (room.white === myUid) room.white = null;
+      if (room.black === myUid) room.black = null;
+      if (!room.white && !room.black) delete chessRooms[myRoomId];
     }
   });
 });
