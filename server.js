@@ -254,12 +254,12 @@ function ensureRoom(roomId) {
   return rooms[roomId];
 }
 
-// ── 플랫포머 무빙블록 서버 틱 ─────────────────────────
-// MBlock 로직 그대로 이식 (플레이어 없이 자동 이동만)
+// ── 플랫포머 무빙블록 ──────────────────────────────────────
 const PF_ROOM = 'PLATFORMER';
 
-// [mx, my, ex, ey, playerFlag, initX, initY]
-// ── 플랫포머 무빙블록 (클라이언트 MAP에서 정확히 추출, 위→아래 순서) ──
+// 클라이언트 MAP에서 정확히 추출한 블록 목록 (위→아래 순서)
+// am=false : 자동 왕복 블록 (서버가 위치 계산 후 브로드캐스트)
+// am=true  : 플레이어가 올라타야 움직이는 블록 (클라이언트가 직접 처리, 서버는 고정)
 const pfBlocks = [
   { x:  350, y: 1350, inx:  350, iny: 1350, mx:  0, my:  4, ex:  10, ey: 100, am:false, movingWay:1, frame:0 },  // type=g
   { x:  550, y: 1350, inx:  550, iny: 1350, mx:  0, my:  4, ex:  10, ey: 100, am:false, movingWay:1, frame:0 },  // type=g
@@ -287,31 +287,29 @@ const pfBlocks = [
   { x:  150, y: 4300, inx:  150, iny: 4300, mx:  0, my: -2, ex:  10, ey: 200, am:false, movingWay:1, frame:0 },  // type=a
 ];
 
-// 틱마다 블록 위치 계산 (am=true 블록은 플레이어 없이 자동왕복으로 처리)
+// 클라이언트는 60fps(16.67ms)마다 1px씩 이동
+// 서버 틱은 50ms → 한 틱당 3프레임치 이동해야 동일한 속도
+const TICK_SCALE = 3;
+
 function tickPfBlocks() {
   for (const b of pfBlocks) {
-    if (b.am) {
-      // playerFlag 블록: 플레이어 없을 땐 그냥 왕복으로 처리
-      const over = Math.abs(b.x - b.inx) > b.ex || Math.abs(b.y - b.iny) > b.ey;
-      const back = (b.mx>0&&b.x<b.inx&&b.movingWay===-1)||(b.mx<0&&b.x>b.inx&&b.movingWay===-1)||
-                   (b.my>0&&b.y<b.iny&&b.movingWay===-1)||(b.my<0&&b.y>b.iny&&b.movingWay===-1);
-      if (over || back) b.movingWay *= -1;
-      b.x += b.mx * b.movingWay;
-      b.y += b.my * b.movingWay;
-    } else {
-      const a = Math.abs(b.x - b.inx) > b.ex && b.movingWay === 1;
-      const bv= Math.abs(b.y - b.iny) > b.ey && b.movingWay === 1;
-      const c = (b.mx>0&&b.x<b.inx&&b.movingWay===-1)||(b.mx<0&&b.x>b.inx&&b.movingWay===-1);
-      const d = (b.my>0&&b.y<b.iny&&b.movingWay===-1)||(b.my<0&&b.y>b.iny&&b.movingWay===-1);
-      if (a||bv||c||d) b.movingWay *= -1;
-      b.x += b.mx * b.movingWay;
-      b.y += b.my * b.movingWay;
-    }
+    // am=true: 플레이어가 올라타야 움직이는 블록 → 서버에서는 고정
+    // 클라이언트가 플레이어 탑승 여부를 직접 감지해서 move() 처리함
+    if (b.am) continue;
+
+    // am=false: 자동 왕복 블록
+    const a = Math.abs(b.x - b.inx) > b.ex && b.movingWay === 1;
+    const bv = Math.abs(b.y - b.iny) > b.ey && b.movingWay === 1;
+    const c = (b.mx > 0 && b.x < b.inx && b.movingWay === -1) || (b.mx < 0 && b.x > b.inx && b.movingWay === -1);
+    const d = (b.my > 0 && b.y < b.iny && b.movingWay === -1) || (b.my < 0 && b.y > b.iny && b.movingWay === -1);
+    if (a || bv || c || d) b.movingWay *= -1;
+    b.x += b.mx * b.movingWay * TICK_SCALE;
+    b.y += b.my * b.movingWay * TICK_SCALE;
     b.frame++;
   }
 }
 
-// 50ms 마다 틱 + PLATFORMER 룸에 브로드캐스트
+// 50ms마다 틱 + PLATFORMER 룸에 브로드캐스트
 setInterval(() => {
   tickPfBlocks();
   const payload = pfBlocks.map(b => ({ x: b.x, y: b.y }));
@@ -363,6 +361,11 @@ io.on('connection', socket => {
     socket.emit('room_meta', room.meta);
     io.emit('presence_update', Object.values(presence));
     socket.emit('state_update', room.state);
+
+    // 플랫포머 룸 입장 시 현재 블록 위치 즉시 전송
+    if (myRoomId === PF_ROOM) {
+      socket.emit('blocks_update', pfBlocks.map(b => ({ x: b.x, y: b.y })));
+    }
 
     if (hits[uid]?.length) {
       socket.emit('hits', hits[uid]);
