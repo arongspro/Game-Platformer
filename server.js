@@ -309,11 +309,12 @@ function tickPfBlocks() {
   }
 }
 
+// 16ms마다 서버 틱 (블록 위치 계산)
+setInterval(tickPfBlocks, 16);
+
 // 1초마다 드리프트 보정 브로드캐스트 (트래픽 최소화)
-// 접속 시 초기 상태(x,y,movingWay) 전송 → 클라이언트가 로컬 60fps로 계산
-// am=true 블록은 null 전송 (클라이언트 로컬 처리)
+// 클라이언트는 이 상태로 로컬 60fps 계산 재동기화
 setInterval(() => {
-  tickPfBlocks();
   const payload = pfBlocks.map(b => b.am ? null : { x: b.x, y: b.y, movingWay: b.movingWay });
   io.to(PF_ROOM).emit('blocks_update', payload);
 }, 1000);
