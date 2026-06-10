@@ -289,7 +289,7 @@ const pfBlocks = [
 
 // 클라이언트는 60fps(16.67ms)마다 1px씩 이동
 // 서버 틱은 50ms → 한 틱당 3프레임치 이동해야 동일한 속도
-const TICK_SCALE = 3;
+const TICK_SCALE = 1;  // 16ms 틱 ≈ 60fps, 클라이언트와 동일
 
 function tickPfBlocks() {
   for (const b of pfBlocks) {
@@ -309,13 +309,14 @@ function tickPfBlocks() {
   }
 }
 
-// 50ms마다 틱 + PLATFORMER 룸에 브로드캐스트
-// am=true 블록은 클라이언트가 로컬 처리하므로 null로 전송 (클라이언트가 무시)
+// 1초마다 드리프트 보정 브로드캐스트 (트래픽 최소화)
+// 접속 시 초기 상태(x,y,movingWay) 전송 → 클라이언트가 로컬 60fps로 계산
+// am=true 블록은 null 전송 (클라이언트 로컬 처리)
 setInterval(() => {
   tickPfBlocks();
-  const payload = pfBlocks.map(b => b.am ? null : { x: b.x, y: b.y });
+  const payload = pfBlocks.map(b => b.am ? null : { x: b.x, y: b.y, movingWay: b.movingWay });
   io.to(PF_ROOM).emit('blocks_update', payload);
-}, 50);
+}, 1000);
 
 // ── Socket.IO ──────────────────────────────────────────────
 const io = new Server(server, {
@@ -363,9 +364,10 @@ io.on('connection', socket => {
     io.emit('presence_update', Object.values(presence));
     socket.emit('state_update', room.state);
 
-    // 플랫포머 룸 입장 시 현재 블록 위치 즉시 전송
+    // 플랫포머 룸 입장 시 현재 블록 상태 즉시 전송 (x, y, movingWay 포함)
+    // 클라이언트가 이 상태로 로컬 60fps 계산 시작
     if (myRoomId === PF_ROOM) {
-      socket.emit('blocks_update', pfBlocks.map(b => ({ x: b.x, y: b.y })));
+      socket.emit('blocks_update', pfBlocks.map(b => b.am ? null : { x: b.x, y: b.y, movingWay: b.movingWay }));
     }
 
     if (hits[uid]?.length) {
