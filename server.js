@@ -293,9 +293,22 @@ const TICK_SCALE = 1;  // 16ms 틱 ≈ 60fps, 클라이언트와 동일
 
 function tickPfBlocks() {
   for (const b of pfBlocks) {
-    // am=true: 플레이어가 올라타야 움직이는 블록 → 서버에서는 고정
-    // 클라이언트가 플레이어 탑승 여부를 직접 감지해서 move() 처리함
-    if (b.am) continue;
+    if (b.am) {
+      // 아무도 안 밟고 있고, 원점에서 벗어나 있으면 서버가 복귀 처리
+      if (!b.ridden && (Math.abs(b.x - b.inx) > 1 || Math.abs(b.y - b.iny) > 1)) {
+        b.returning = true;
+        const speed = Math.max(Math.abs(b.mx) || 1, Math.abs(b.my) || 1);
+        if (Math.abs(b.x - b.inx) > speed) b.x += (b.inx > b.x ? 1 : -1) * speed;
+        else b.x = b.inx;
+        if (Math.abs(b.y - b.iny) > speed) b.y += (b.iny > b.y ? 1 : -1) * speed;
+        else b.y = b.iny;
+        if (b.x === b.inx && b.y === b.iny) { b.returning = false; b.moved = false; }
+        // 복귀 중인 위치를 모든 클라이언트에 즉시 전파
+        io.to(PF_ROOM).emit('am_blocks_patch', [{ index: pfBlocks.indexOf(b), x: b.x, y: b.y, movingWay: 1, returning: b.returning }]);
+      }
+      b.ridden = false; // 매 틱마다 리셋, am_blocks_update 수신 시 true로 세팅
+      continue;
+    }
 
     // am=false: 자동 왕복 블록
     const a = Math.abs(b.x - b.inx) > b.ex && b.movingWay === 1;
@@ -453,7 +466,12 @@ io.on('connection', socket => {
   // am=true 블록 위치를 올라탄 클라이언트에서 수신 → 같은 방 다른 클라이언트에 즉시 전달
   socket.on('am_blocks_update', (updates) => {
     if (myRoomId !== PF_ROOM) return;
-    for (const u of updates) amBlockPositions[u.index] = u;
+    for (const u of updates) {
+      amBlockPositions[u.index] = u;
+      // 클라이언트가 올라타서 보낸 위치 → 서버 pfBlocks에도 반영 + ridden 마킹
+      const b = pfBlocks[u.index];
+      if (b) { b.x = u.x; b.y = u.y; b.ridden = true; b.returning = false; }
+    }
     socket.to(PF_ROOM).emit('am_blocks_patch', updates);
   });
 
