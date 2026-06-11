@@ -302,17 +302,8 @@ function tickPfBlocks() {
     if (b.am) {
       // 아무도 안 밟고 있고, 원점에서 벗어나 있으면 → 클라이언트에게 복귀 신호만 전파
       // 위치 계산은 클라이언트(올라탄 사람)가 전담 — 서버가 직접 계산하면 두 계산이 충돌해 순간이동 발생
-      if (!b.ridden && !b.returning && (Math.abs(b.x - b.inx) > 1 || Math.abs(b.y - b.iny) > 1)) {
-        // 플랫포머 룸 플레이어 중 블록 근처(150px)에 있으면 복귀 신호 보내지 않음
-        const pfState = rooms[PF_ROOM]?.state || {};
-        const anyoneNear = Object.values(pfState).some(p =>
-          p && Math.abs((p.x||0) - b.x) + Math.abs((p.y||0) - b.y) <= 150
-        );
-        if (!anyoneNear) {
-          b.returning = true;
-          io.to(PF_ROOM).emit('am_blocks_patch', [{ index: pfBlocks.indexOf(b), x: b.x, y: b.y, movingWay: 1, returning: true }]);
-        }
-      }
+      // am=true 블록: 클라이언트(올라탄 사람)가 위치 계산 전담
+      // 서버는 상태만 추적 — 직접 계산하면 클라이언트와 충돌해 순간이동 발생
       b.ridden = false; // 매 틱마다 리셋, am_blocks_update 수신 시 true로 세팅
       continue;
     }
