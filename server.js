@@ -300,11 +300,32 @@ const TICK_SCALE = 1;  // 16ms 틱 ≈ 60fps, 클라이언트와 동일
 function tickPfBlocks() {
   for (const b of pfBlocks) {
     if (b.am) {
-      // 아무도 안 밟고 있고, 원점에서 벗어나 있으면 → 클라이언트에게 복귀 신호만 전파
-      // 위치 계산은 클라이언트(올라탄 사람)가 전담 — 서버가 직접 계산하면 두 계산이 충돌해 순간이동 발생
-      // am=true 블록: 클라이언트(올라탄 사람)가 위치 계산 전담
-      // 서버는 상태만 추적 — 직접 계산하면 클라이언트와 충돌해 순간이동 발생
-      b.ridden = false; // 매 틱마다 리셋, am_blocks_update 수신 시 true로 세팅
+      // am 블록 위치/복귀는 클라이언트가 전담 계산 후 am_blocks_update로 전송
+      // 서버는 수신한 상태를 저장하고 다른 클라이언트에 중계만 함
+      // 단, 아무도 밟지 않고 원점 벗어나 있고 아무도 근처에 없으면 서버가 복귀 계산
+      if (!b.ridden) {
+        const distFromOrigin = Math.abs(b.x - b.inx) + Math.abs(b.y - b.iny);
+        if (distFromOrigin > 1) {
+          const pfState = rooms[PF_ROOM]?.state || {};
+          const anyoneNear = Object.values(pfState).some(p =>
+            p && Math.abs((p.x||0) - b.x) + Math.abs((p.y||0) - b.y) <= 150
+          );
+          if (!anyoneNear) {
+            // 복귀 이동
+            const speed = Math.max(Math.abs(b.mx)||1, Math.abs(b.my)||1);
+            if (Math.abs(b.x - b.inx) > speed) b.x += (b.inx > b.x ? 1 : -1) * speed;
+            else b.x = b.inx;
+            if (Math.abs(b.y - b.iny) > speed) b.y += (b.iny > b.y ? 1 : -1) * speed;
+            else b.y = b.iny;
+            b.returning = distFromOrigin > 1;
+            // 복귀 위치를 모든 클라이언트에 브로드캐스트
+            io.to(PF_ROOM).emit('am_blocks_patch', [{ index: pfBlocks.indexOf(b), x: b.x, y: b.y, returning: b.returning }]);
+          }
+        } else {
+          b.returning = false;
+        }
+      }
+      b.ridden = false;
       continue;
     }
 
@@ -471,7 +492,7 @@ io.on('connection', socket => {
     }
   });
 
-  // am=true 블록 위치를 밟은 클라이언트에서 수신 → 같은 방 다른 클라이언트에 즉시 중계
+  // am=true 블록: 밟은 클라이언트가 위치 계산 후 전송 → 서버 저장 + 다른 클라이언트에 중계
   socket.on('am_blocks_update', (updates) => {
     if (myRoomId !== PF_ROOM) return;
     for (const u of updates) {
@@ -480,10 +501,10 @@ io.on('connection', socket => {
         b.x = u.x;
         b.y = u.y;
         b.returning = u.returning ?? false;
+        b.ridden = true; // 이 틱에 누군가 밟고 있음 → tickPfBlocks에서 복귀 안 함
         amBlockPositions[u.index] = { x: b.x, y: b.y, returning: b.returning };
       }
     }
-    // 보낸 사람 제외하고 같은 방 모두에게 중계
     socket.to(PF_ROOM).emit('am_blocks_patch', updates);
   });
 
