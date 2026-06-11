@@ -300,17 +300,11 @@ const TICK_SCALE = 1;  // 16ms 틱 ≈ 60fps, 클라이언트와 동일
 function tickPfBlocks() {
   for (const b of pfBlocks) {
     if (b.am) {
-      // 아무도 안 밟고 있고, 원점에서 벗어나 있으면 서버가 복귀 처리
-      if (!b.ridden && (Math.abs(b.x - b.inx) > 1 || Math.abs(b.y - b.iny) > 1)) {
+      // 아무도 안 밟고 있고, 원점에서 벗어나 있으면 → 클라이언트에게 복귀 신호만 전파
+      // 위치 계산은 클라이언트(올라탄 사람)가 전담 — 서버가 직접 계산하면 두 계산이 충돌해 순간이동 발생
+      if (!b.ridden && !b.returning && (Math.abs(b.x - b.inx) > 1 || Math.abs(b.y - b.iny) > 1)) {
         b.returning = true;
-        const speed = Math.max(Math.abs(b.mx) || 1, Math.abs(b.my) || 1);
-        if (Math.abs(b.x - b.inx) > speed) b.x += (b.inx > b.x ? 1 : -1) * speed;
-        else b.x = b.inx;
-        if (Math.abs(b.y - b.iny) > speed) b.y += (b.iny > b.y ? 1 : -1) * speed;
-        else b.y = b.iny;
-        if (b.x === b.inx && b.y === b.iny) { b.returning = false; b.moved = false; }
-        // 복귀 중인 위치를 모든 클라이언트에 즉시 전파
-        io.to(PF_ROOM).emit('am_blocks_patch', [{ index: pfBlocks.indexOf(b), x: b.x, y: b.y, movingWay: 1, returning: b.returning }]);
+        io.to(PF_ROOM).emit('am_blocks_patch', [{ index: pfBlocks.indexOf(b), x: b.x, y: b.y, movingWay: 1, returning: true }]);
       }
       b.ridden = false; // 매 틱마다 리셋, am_blocks_update 수신 시 true로 세팅
       continue;
@@ -469,9 +463,13 @@ io.on('connection', socket => {
     if (myRoomId !== PF_ROOM) return;
     for (const u of updates) {
       amBlockPositions[u.index] = u;
-      // 클라이언트가 올라타서 보낸 위치 → 서버 pfBlocks에도 반영 + ridden 마킹
       const b = pfBlocks[u.index];
-      if (b) { b.x = u.x; b.y = u.y; b.ridden = true; b.returning = false; }
+      if (b) {
+        b.x = u.x; b.y = u.y; b.ridden = true;
+        // 클라이언트가 복귀 완료(원점 도달)를 알려왔으면 서버 returning도 리셋
+        if (u.returning === false && b.returning) b.returning = false;
+        else if (!u.returning) b.returning = false;
+      }
     }
     socket.to(PF_ROOM).emit('am_blocks_patch', updates);
   });
