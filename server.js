@@ -300,25 +300,23 @@ const TICK_SCALE = 1;  // 16ms 틱 ≈ 60fps, 클라이언트와 동일
 function tickPfBlocks() {
   for (const b of pfBlocks) {
     if (b.am) {
-      // am 블록 위치/복귀는 클라이언트가 전담 계산 후 am_blocks_update로 전송
-      // 서버는 수신한 상태를 저장하고 다른 클라이언트에 중계만 함
-      // 단, 아무도 밟지 않고 원점 벗어나 있고 아무도 근처에 없으면 서버가 복귀 계산
+      // 클라이언트 로직과 동일: 밟고 있으면(ridden) 서버는 손 안 댐
+      // 아무도 안 밟고 있으면 서버가 복귀 계산 후 브로드캐스트
       if (!b.ridden) {
         const distFromOrigin = Math.abs(b.x - b.inx) + Math.abs(b.y - b.iny);
         if (distFromOrigin > 1) {
           const pfState = rooms[PF_ROOM]?.state || {};
+          // 150px 안에 아무도 없으면 복귀
           const anyoneNear = Object.values(pfState).some(p =>
             p && Math.abs((p.x||0) - b.x) + Math.abs((p.y||0) - b.y) <= 150
           );
           if (!anyoneNear) {
-            // 복귀 이동
             const speed = Math.max(Math.abs(b.mx)||1, Math.abs(b.my)||1);
             if (Math.abs(b.x - b.inx) > speed) b.x += (b.inx > b.x ? 1 : -1) * speed;
             else b.x = b.inx;
             if (Math.abs(b.y - b.iny) > speed) b.y += (b.iny > b.y ? 1 : -1) * speed;
             else b.y = b.iny;
-            b.returning = distFromOrigin > 1;
-            // 복귀 위치를 모든 클라이언트에 브로드캐스트
+            b.returning = (Math.abs(b.x - b.inx) + Math.abs(b.y - b.iny)) > 1;
             io.to(PF_ROOM).emit('am_blocks_patch', [{ index: pfBlocks.indexOf(b), x: b.x, y: b.y, returning: b.returning }]);
           }
         } else {
