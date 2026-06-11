@@ -338,7 +338,10 @@ const amBlockPositions = {};  // index → { x, y, movingWay, returning }
 
 setInterval(() => {
   const payload = pfBlocks.map((b, i) => {
-    if (b.am) return amBlockPositions[i] ?? { x: b.inx, y: b.iny, movingWay: 1 };
+    if (b.am) {
+      const pos = amBlockPositions[i] ?? { x: b.inx, y: b.iny, movingWay: 1 };
+      return { ...pos, returning: b.returning ?? false };
+    }
     return { x: b.x, y: b.y, movingWay: b.movingWay };
   });
   io.to(PF_ROOM).emit('blocks_update', payload);
