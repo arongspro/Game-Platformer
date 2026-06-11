@@ -374,7 +374,19 @@ io.on('connection', socket => {
       };
     }
 
-    socket.on('disconnect', () => {
+    // ── Undo request: 요청자 → 상대방에게 전달 ──
+  socket.on('chess_undo_request', () => {
+    if (!myRoomId) return;
+    socket.to(myRoomId).emit('chess_undo_request', { fromColor: myColor });
+  });
+
+  // ── Undo response: 상대방 응답 → 요청자에게 전달 ──
+  socket.on('chess_undo_response', ({ accepted }) => {
+    if (!myRoomId) return;
+    socket.to(myRoomId).emit('chess_undo_response', { accepted });
+  });
+
+  socket.on('disconnect', () => {
       delete presence[uid];
       delete uidToSocket[uid];
       if (rooms[myRoomId]) {
