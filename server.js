@@ -318,10 +318,11 @@ function tickPfBlocks() {
           const idx = pfBlocks.indexOf(b);
           amBlockPositions[idx] = { x: b.x, y: b.y, returning: b.returning };
           io.to(PF_ROOM).emit('am_blocks_patch', [{ index: idx, x: b.x, y: b.y, returning: b.returning }]);
-        } else {
+        } else if (distFromOrigin <= 1) {
           b.returning = false;
           amBlockPositions[pfBlocks.indexOf(b)] = { x: b.inx, y: b.iny, returning: false };
         }
+        // anyoneNear이면 아무것도 안 함 (위치 유지)
       }
       // ridden 상태는 riddenAt 타임스탬프로 판단 (200ms 내 수신 시 밟는 중으로 간주)
       continue;
