@@ -349,15 +349,11 @@ const amBlockPositions = {};  // index → { x, y, movingWay, returning }
 
 setInterval(() => {
   const payload = pfBlocks.map((b, i) => {
-    if (b.am) {
-      // am=true 블록도 200ms마다 현재 위치 전송 (다른 클라이언트 보간용)
-      const pos = amBlockPositions[i];
-      return pos ? { x: pos.x, y: pos.y, returning: pos.returning, am: true } : null;
-    }
+    if (b.am) return null;  // am=true 블록은 클라이언트 로컬이 권위, 덮어쓰지 않음
     return { x: b.x, y: b.y, movingWay: b.movingWay };
   });
   io.to(PF_ROOM).emit('blocks_update', payload);
-}, 200);
+}, 1000);
 
 // ── Socket.IO 이벤트 ───────────────────────────────────────
 const uidToSocket = {};
