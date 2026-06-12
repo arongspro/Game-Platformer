@@ -302,7 +302,8 @@ function tickPfBlocks() {
     if (b.am) {
       // 클라이언트 로직과 동일: 밟고 있으면(ridden) 서버는 손 안 댐
       // 아무도 안 밟고 있으면 서버가 복귀 계산 후 브로드캐스트
-      if (!b.ridden || (Date.now() - b.riddenAt) > 200) {
+      if (b.ridden && (Date.now() - b.riddenAt) <= 500) continue;
+      {
         const distFromOrigin = Math.abs(b.x - b.inx) + Math.abs(b.y - b.iny);
         const pfState = rooms[PF_ROOM]?.state || {};
         const anyoneNear = Object.values(pfState).some(p =>
