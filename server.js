@@ -302,8 +302,7 @@ function tickPfBlocks() {
     if (b.am) {
       // 클라이언트 로직과 동일: 밟고 있으면(ridden) 서버는 손 안 댐
       // 아무도 안 밟고 있으면 서버가 복귀 계산 후 브로드캐스트
-      if (b.ridden && (Date.now() - b.riddenAt) <= 500) continue;
-      {
+      if (!b.ridden || (Date.now() - b.riddenAt) > 200) {
         const distFromOrigin = Math.abs(b.x - b.inx) + Math.abs(b.y - b.iny);
         const pfState = rooms[PF_ROOM]?.state || {};
         const anyoneNear = Object.values(pfState).some(p =>
@@ -350,10 +349,7 @@ const amBlockPositions = {};  // index → { x, y, movingWay, returning }
 
 setInterval(() => {
   const payload = pfBlocks.map((b, i) => {
-    if (b.am) {
-      const pos = amBlockPositions[i] ?? { x: b.inx, y: b.iny, movingWay: 1 };
-      return { ...pos, returning: b.returning ?? false };
-    }
+    if (b.am) return null;  // am=true 블록은 클라이언트 로컬이 권위, 덮어쓰지 않음
     return { x: b.x, y: b.y, movingWay: b.movingWay };
   });
   io.to(PF_ROOM).emit('blocks_update', payload);
